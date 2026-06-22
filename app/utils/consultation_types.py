@@ -11,11 +11,11 @@ IMAGE_TYPES = frozenset({IMAGE_FARMER_SELF, IMAGE_ADMIN_FOR_FARMER, IMAGE_ADMIN_
 
 LABELS = {
     FARMER_SELF: "Farmer self-diagnosis",
-    ADMIN_FOR_FARMER: "Admin diagnosis for farmer",
-    ADMIN_GENERAL: "Admin general diagnosis",
+    ADMIN_FOR_FARMER: "Expert diagnosis for farmer",
+    ADMIN_GENERAL: "Expert general diagnosis",
     IMAGE_FARMER_SELF: "Farmer image diagnosis",
-    IMAGE_ADMIN_FOR_FARMER: "Admin image diagnosis for farmer",
-    IMAGE_ADMIN_GENERAL: "Admin general image diagnosis",
+    IMAGE_ADMIN_FOR_FARMER: "Expert image diagnosis for farmer",
+    IMAGE_ADMIN_GENERAL: "Expert general image diagnosis",
 }
 
 

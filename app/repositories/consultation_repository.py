@@ -125,6 +125,12 @@ def get_consultation_history(
             cr.name AS crop_name,
             d.name AS diagnosed_disease,
             c.confidence_score,
+            COALESCE((
+                SELECT string_agg(s.name, ', ' ORDER BY s.name)
+                FROM consultation_symptom cs
+                JOIN symptom s ON s.id = cs.symptom_id
+                WHERE cs.consultation_id = c.id
+            ), '-') AS symptoms,
             COALESCE(c.gemini_raw_extraction, ci.visual_summary) AS image_visual_summary,
             COALESCE(c.source, CASE WHEN ci.id IS NULL THEN 'SYMPTOMS' ELSE 'IMAGE' END) AS diagnosis_source,
             ci.analysis_source AS image_analysis_source
@@ -245,7 +251,19 @@ def get_consultation_summary(consultation_id: int) -> dict | None:
                u.full_name AS performed_by_name,
                cr.name AS crop_name,
                d.name AS disease_name,
-               dr.explanation, dr.result_title
+               dr.explanation, dr.result_title,
+               COALESCE((
+                   SELECT string_agg(s.name, ', ' ORDER BY s.name)
+                   FROM consultation_symptom cs
+                   JOIN symptom s ON s.id = cs.symptom_id
+                   WHERE cs.consultation_id = c.id
+               ), '-') AS symptoms,
+               COALESCE((
+                   SELECT string_agg(t.name, ', ' ORDER BY ct.id)
+                   FROM consultation_treatment ct
+                   JOIN treatment t ON t.id = ct.treatment_id
+                   WHERE ct.consultation_id = c.id
+               ), '-') AS treatments
         FROM consultation c
         JOIN app_user u ON u.id = c.performed_by_user_id
         LEFT JOIN farmer f ON f.id = c.farmer_id

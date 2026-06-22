@@ -7,9 +7,9 @@ from app.repositories.consultation_repository import get_admin_dashboard_stats
 from app.services.consultation_service import ConsultationService
 from app.services.report_service import ReportService
 from app.ui.components.farmer_theme import inject_farmer_theme, render_page_header
-from app.utils.auth import require_admin
+from app.utils.auth import require_expert
 
-require_admin()
+require_expert()
 inject_farmer_theme()
 render_page_header("Dashboard", "System overview.")
 
@@ -65,8 +65,9 @@ if history:
                 else str(row["consultation_date"])[:10],
                 "Farmer": row.get("farmer_name") or "-",
                 "Disease": row["diagnosed_disease"] or "-",
+                "Symptoms": row.get("symptoms") or "-",
                 "Confidence": row.get("confidence_score") or 0,
-                "Source": "Image" if row.get("source") == "IMAGE" else "Symptoms",
+                "Source": "Image recognition" if row.get("source") == "IMAGE" else "Manual",
             }
             for row in history[:6]
         ]

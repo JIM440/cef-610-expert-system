@@ -27,6 +27,11 @@ def is_admin() -> bool:
     return bool(user and user.get("role_code") == "admin")
 
 
+def is_expert() -> bool:
+    user = current_user()
+    return bool(user and user.get("role_code") in {"admin", "expert"})
+
+
 def is_farmer() -> bool:
     user = current_user()
     return bool(user and user.get("role_code") == "farmer")
@@ -59,6 +64,14 @@ def require_admin() -> dict:
     user = require_login()
     if user.get("role_code") != "admin":
         st.error("Access denied. Administrator account required.")
+        st.stop()
+    return user
+
+
+def require_expert() -> dict:
+    user = require_login()
+    if user.get("role_code") not in {"admin", "expert"}:
+        st.error("Access denied. Crop expert account required.")
         st.stop()
     return user
 

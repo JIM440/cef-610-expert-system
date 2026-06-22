@@ -10,6 +10,7 @@ from app.database import get_connection, get_schema_issues, test_connection  # n
 MIGRATIONS = (
     "015_consultation_source_match_tier.sql",
     "016_consultation_match_trace.sql",
+    "017_create_expert_role.sql",
 )
 
 

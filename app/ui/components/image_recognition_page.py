@@ -7,15 +7,19 @@ from app.services.image_recognition_service import ImageRecognitionService
 from app.ui.components.diagnosis_results_view import render_diagnosis_results_cards
 from app.ui.components.farmer_theme import render_page_header
 from app.ui.components.farmer_diagnosis import PREFILL_KEY
-from app.utils.auth import is_admin, require_login
+from app.utils.auth import is_expert, require_login
 
 MAX_BYTES = 5 * 1024 * 1024
-RESULT_KEY = "image_recognition_result"
+RESULT_KEY_PREFIX = "image_recognition_result"
+
+
+def _result_key(user_id: int) -> str:
+    return f"{RESULT_KEY_PREFIX}_{user_id}"
 
 
 def _continue_to_manual(symptom_ids: list[int]) -> None:
     st.session_state[PREFILL_KEY] = symptom_ids
-    target = "pages/admin/diagnosis.py" if is_admin() else "pages/farmer/diagnosis.py"
+    target = "pages/admin/diagnosis.py" if is_expert() else "pages/farmer/diagnosis.py"
     try:
         st.switch_page(target)
     except Exception:
@@ -24,6 +28,7 @@ def _continue_to_manual(symptom_ids: list[int]) -> None:
 
 def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
     user = require_login()
+    result_key = _result_key(user["id"])
 
     render_page_header(
         "Image Recognition",
@@ -37,8 +42,11 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
         )
         st.stop()
 
-    if RESULT_KEY in st.session_state:
-        payload = st.session_state[RESULT_KEY]
+    if result_key in st.session_state:
+        payload = st.session_state[result_key]
+        if not isinstance(payload, dict) or not isinstance(payload.get("analysis"), dict):
+            st.session_state.pop(result_key, None)
+            st.rerun()
         analysis = payload["analysis"]
         st.subheader("Analysis results")
         col_a, col_b = st.columns([1, 1])
@@ -77,7 +85,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
             st.info("Try another image or continue with manual symptom selection.")
 
         if st.button("Analyze another image"):
-            st.session_state.pop(RESULT_KEY, None)
+            st.session_state.pop(result_key, None)
             st.rerun()
         return
 
@@ -113,7 +121,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
         st.stop()
 
     target_farmer_id = user.get("farmer_id")
-    if allow_farmer_select and is_admin():
+    if allow_farmer_select and is_expert():
         mode = st.radio(
             "Record diagnosis for",
             ["General (no farmer)", "Specific farmer"],
@@ -133,7 +141,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
     if uploaded and st.button("Analyze Image", type="primary", width="stretch"):
         service = ImageRecognitionService()
         ctype, fid = service.resolve_image_consultation_type(
-            is_admin=is_admin(),
+            is_admin=is_expert(),
             farmer_id=target_farmer_id if allow_farmer_select else user.get("farmer_id"),
             actor_farmer_id=user.get("farmer_id"),
         )
@@ -159,7 +167,8 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
             st.error("Could not analyze image. Please try a clearer photo.")
             return
 
-        st.session_state[RESULT_KEY] = payload
+        payload.get("analysis", {}).pop("preview_image", None)
+        st.session_state[result_key] = payload
         st.rerun()
 
     elif not uploaded:

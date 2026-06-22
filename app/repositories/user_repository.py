@@ -1,4 +1,4 @@
-from app.database import execute, fetch_all, fetch_one
+from app.database import execute, fetch_all, fetch_one, get_connection
 from app.utils.passwords import hash_password
 
 
@@ -72,11 +72,37 @@ def create_app_user(
     )
 
 
+
+
+def get_all_experts() -> list[dict]:
+    return fetch_all(
+        """
+        SELECT u.id, u.username, u.full_name, u.created_at,
+               r.code AS role_code, r.label AS role_label
+        FROM app_user u
+        JOIN role r ON r.id = u.role_id
+        WHERE r.code = 'expert'
+          AND u.is_active = TRUE
+        ORDER BY u.full_name, u.username
+        """
+    )
+
+
+def create_expert_account(full_name: str, username: str, password: str) -> int:
+    if username_exists(username):
+        raise ValueError(f"Username '{username}' is already taken.")
+    return create_app_user(
+        username=username,
+        password=password,
+        role_code="expert",
+        full_name=full_name,
+    )
+
 def get_all_farmers() -> list[dict]:
     return fetch_all(
         """
         SELECT f.id, f.full_name, f.phone_number, f.location, f.email, f.created_at,
-               u.username, u.is_active AS account_active
+               u.username
         FROM farmer f
         LEFT JOIN app_user u ON u.farmer_id = f.id
         ORDER BY f.full_name
@@ -113,22 +139,21 @@ def create_farmer_with_account(
 def update_farmer_record(
     farmer_id: int, full_name: str, phone: str, location: str, email: str
 ) -> None:
-    execute(
-        """
-        UPDATE farmer
-        SET full_name = %(name)s, phone_number = %(phone)s,
-            location = %(location)s, email = %(email)s,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = %(id)s
-        """,
-        {
-            "id": farmer_id,
-            "name": full_name,
-            "phone": phone,
-            "location": location,
-            "email": email,
-        },
-    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE farmer
+                SET full_name = %s, phone_number = %s, location = %s,
+                    email = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE id = %s
+                """,
+                (full_name, phone, location, email, farmer_id),
+            )
+            cur.execute(
+                "UPDATE app_user SET full_name = %s WHERE farmer_id = %s",
+                (full_name, farmer_id),
+            )
 
 
 def get_farmer_by_id(farmer_id: int) -> dict | None:

@@ -1,6 +1,5 @@
 import app.path_setup  # noqa: F401
 
-import pandas as pd
 import streamlit as st
 
 from app.repositories.crop_repository import get_tomato_crop_id
@@ -16,117 +15,116 @@ from app.repositories.disease_repository import (
 )
 from app.repositories.symptom_repository import get_all_symptoms
 from app.repositories.treatment_repository import get_all_treatments
-from app.utils.auth import require_admin
+from app.ui.components.farmer_theme import render_page_header
+from app.utils.auth import require_expert
 
-require_admin()
-st.header("Diseases - Knowledge Base (Facts)")
-st.caption(
-    "Disease knowledge answers: What is true about this disease? Diagnosis logic lives on the Rules page."
-)
-
+require_expert()
+render_page_header("Diseases", "Factual tomato disease knowledge used by experts and diagnosis reports.")
 diseases = get_all_diseases()
-search = st.text_input("Search diseases", placeholder="Name or description...")
-filtered = diseases
-if search:
-    q = search.lower()
-    filtered = [d for d in diseases if q in d["name"].lower() or q in (d.get("description") or "").lower()]
+list_tab, edit_tab, add_tab = st.tabs(["Disease cards", "Edit disease", "+ Add disease"])
 
-tab1, tab2 = st.tabs(["Diseases", "Edit/Add"])
+with list_tab:
+    search = st.text_input("Search diseases", placeholder="Name, description, symptom, or treatment...")
+    q = search.casefold().strip()
+    cards = []
+    for disease in diseases:
+        summary = get_disease_knowledge_summary(disease["id"])
+        haystack = " ".join([
+            disease["name"], disease.get("description") or "",
+            " ".join(s["name"] for s in summary["symptoms"]),
+            " ".join(t["name"] for t in summary["treatments"]),
+        ]).casefold()
+        if not q or q in haystack:
+            cards.append(summary)
+    for start in range(0, len(cards), 2):
+        cols = st.columns(2)
+        for col, summary in zip(cols, cards[start:start + 2]):
+            disease = summary["disease"]
+            with col:
+                with st.container(border=True):
+                    st.subheader(disease["name"])
+                    st.write(disease.get("description") or "No description provided.")
+                    st.markdown("**Common symptoms**")
+                    st.caption(", ".join(s["name"] for s in summary["symptoms"]) or "None linked")
+                    st.markdown("**Treatments**")
+                    st.caption(", ".join(t["name"] for t in summary["treatments"]) or "None linked")
+                    st.caption(f"Disease ID {disease['id']}")
+    if not cards:
+        st.info("No diseases match this search.")
 
-with tab1:
-    st.dataframe(
-        pd.DataFrame(filtered),
-        width="stretch",
-        hide_index=True,
-        column_config={"id": st.column_config.NumberColumn("ID", format="%d")},
-    )
-
-with tab2:
-    if diseases:
-        with st.expander("Edit disease", expanded=True):
-            did = st.selectbox(
-                "Disease",
-                [d["id"] for d in diseases],
-                format_func=lambda i: next(d["name"] for d in diseases if d["id"] == i),
-            )
-            summary = get_disease_knowledge_summary(did)
-            d = summary["disease"]
-            name = st.text_input("Name", value=d["name"])
-            desc = st.text_area("Description", value=d["description"] or "")
-            template = st.text_area("Explanation template", value=d["explanation_template"] or "")
-            c1, c2 = st.columns(2)
-            if c1.button("Save disease info", type="primary"):
-                update_disease(did, name, desc, template)
-                st.success("Disease updated.")
-                st.rerun()
-            confirm = c2.checkbox("Confirm delete", key=f"confirm_disease_{did}")
-            if c2.button("Delete disease", disabled=not confirm):
-                delete_disease(did)
-                st.success("Disease deleted.")
-                st.rerun()
-
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**Common symptoms**")
-                for s in summary["symptoms"]:
-                    st.write(f"- {s['name']} (weight {s['weight']})")
-                all_symptoms = get_all_symptoms()
-                linked_ids = {s["id"] for s in summary["symptoms"]}
-                available = [s for s in all_symptoms if s["id"] not in linked_ids]
-                if available:
-                    to_link = st.selectbox(
-                        "Link symptom to disease",
-                        [s["id"] for s in available],
-                        format_func=lambda i: next(s["name"] for s in available if s["id"] == i),
-                        key="link_symptom",
-                    )
-                    weight = st.number_input("Association weight", 1, 10, 1, key="sym_weight")
-                    if st.button("Link symptom"):
-                        link_disease_symptom(did, to_link, weight)
-                        st.rerun()
-                if summary["symptoms"]:
-                    to_unlink = st.selectbox(
-                        "Remove symptom link",
-                        [s["id"] for s in summary["symptoms"]],
-                        format_func=lambda i: next(s["name"] for s in summary["symptoms"] if s["id"] == i),
-                        key="unlink_symptom",
-                    )
-                    if st.button("Unlink symptom"):
-                        unlink_disease_symptom(did, to_unlink)
-                        st.rerun()
-
-            with col2:
-                st.markdown("**Common environments**")
-                for e in summary["environments"]:
-                    st.write(f"- {e['condition_name']}: {e['value_name']}")
-
-                st.markdown("**General treatments**")
-                for t in summary["treatments"]:
-                    st.write(f"- {t['name']}")
-                all_treatments = get_all_treatments()
-                linked_t = {t["id"] for t in summary["treatments"]}
-                avail_t = [t for t in all_treatments if t["id"] not in linked_t]
-                if avail_t:
-                    tid = st.selectbox(
-                        "Link treatment",
-                        [t["id"] for t in avail_t],
-                        format_func=lambda i: next(t["name"] for t in avail_t if t["id"] == i),
-                        key="link_treatment",
-                    )
-                    if st.button("Link treatment"):
-                        link_disease_treatment(did, tid)
-                        st.rerun()
-
-    with st.expander("Add disease", expanded=not diseases):
-        crop_id = get_tomato_crop_id()
-        if crop_id is None:
-            st.warning("Tomato crop is not configured in the database.")
-            st.stop()
-        st.caption("New diseases are added to the tomato knowledge base.")
-        name = st.text_input("Disease name", key="new_disease_name")
-        desc = st.text_area("Description", key="new_disease_desc")
-        template = st.text_area("Explanation template", key="new_disease_template")
-        if st.button("Add disease", type="primary"):
-            create_disease(crop_id, name, desc, template)
-            st.success("Disease added. Link symptoms from the edit section.")
+with edit_tab:
+    if not diseases:
+        st.info("Add a disease first.")
+    else:
+        did = st.selectbox("Select disease", [d["id"] for d in diseases], format_func=lambda i: next(d["name"] for d in diseases if d["id"] == i))
+        summary = get_disease_knowledge_summary(did)
+        disease = summary["disease"]
+        with st.form("edit_disease_form"):
+            name = st.text_input("Name", value=disease["name"])
+            description = st.text_area("Description", value=disease.get("description") or "", height=130)
+            template = st.text_area("Diagnosis explanation template", value=disease.get("explanation_template") or "", height=130)
+            save = st.form_submit_button("Save disease", type="primary", width="stretch")
+        if save:
+            update_disease(did, name.strip(), description.strip(), template.strip())
+            st.success("Disease updated.")
             st.rerun()
+
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown("**Symptom associations**")
+            for symptom in summary["symptoms"]:
+                st.write(f"- {symptom['name']} (weight {symptom['weight']})")
+            all_symptoms = get_all_symptoms()
+            linked_ids = {s["id"] for s in summary["symptoms"]}
+            available = [s for s in all_symptoms if s["id"] not in linked_ids]
+            if available:
+                sid = st.selectbox("Add symptom", [s["id"] for s in available], format_func=lambda i: next(s["name"] for s in available if s["id"] == i))
+                weight = st.number_input("Association weight", min_value=1, max_value=10, value=1)
+                if st.button("Link symptom"):
+                    link_disease_symptom(did, sid, weight)
+                    st.rerun()
+            if summary["symptoms"]:
+                remove_sid = st.selectbox("Remove symptom", [s["id"] for s in summary["symptoms"]], format_func=lambda i: next(s["name"] for s in summary["symptoms"] if s["id"] == i))
+                if st.button("Unlink symptom"):
+                    unlink_disease_symptom(did, remove_sid)
+                    st.rerun()
+        with c2:
+            st.markdown("**Treatment associations**")
+            for treatment in summary["treatments"]:
+                st.write(f"- {treatment['name']}")
+            all_treatments = get_all_treatments()
+            linked_treatments = {t["id"] for t in summary["treatments"]}
+            available_treatments = [t for t in all_treatments if t["id"] not in linked_treatments]
+            if available_treatments:
+                tid = st.selectbox("Add treatment", [t["id"] for t in available_treatments], format_func=lambda i: next(t["name"] for t in available_treatments if t["id"] == i))
+                priority = st.number_input("Treatment priority", min_value=1, max_value=5, value=1)
+                if st.button("Link treatment"):
+                    link_disease_treatment(did, tid, priority)
+                    st.rerun()
+            st.markdown("**Environmental facts**")
+            for environment in summary["environments"]:
+                st.write(f"- {environment['condition_name']}: {environment['value_name']}")
+
+        confirm = st.checkbox("I understand deleting this disease also removes its linked rules.")
+        if st.button("Delete disease", disabled=not confirm):
+            delete_disease(did)
+            st.success("Disease deleted.")
+            st.rerun()
+
+with add_tab:
+    crop_id = get_tomato_crop_id()
+    if crop_id is None:
+        st.warning("Tomato crop is not configured in the database.")
+    else:
+        with st.form("add_disease_form"):
+            name = st.text_input("Disease name")
+            description = st.text_area("Description", height=130)
+            template = st.text_area("Diagnosis explanation template", height=130)
+            add = st.form_submit_button("Add disease", type="primary", width="stretch")
+        if add:
+            if not name.strip():
+                st.error("Disease name is required.")
+            else:
+                create_disease(crop_id, name.strip(), description.strip(), template.strip())
+                st.success("Disease added. Use Edit disease to link symptoms and treatments.")
+                st.rerun()

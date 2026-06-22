@@ -45,13 +45,19 @@ Set-Location ..
 
 ### 3. Update an existing database
 
-After pulling application changes, run:
+After pulling application changes, apply the SQL updates directly:
+
+```powershell
+psql -U postgres -d crop_expert_system -f database/apply_current_updates.sql
+```
+
+Alternatively, use the Python migration runner:
 
 ```powershell
 python scripts/apply_schema_updates.py
 ```
 
-This command safely applies the current idempotent schema updates. The application also checks required columns at startup and reports missing schema changes clearly.
+Both commands safely apply the current idempotent schema updates, including the database-backed `expert` role.
 
 ### 4. Launch the application
 

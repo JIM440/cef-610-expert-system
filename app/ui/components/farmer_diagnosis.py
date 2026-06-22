@@ -6,7 +6,7 @@ from app.repositories.user_repository import get_all_farmers
 from app.services.diagnosis_service import DiagnosisService
 from app.ui.components.farmer_theme import render_page_header
 from app.ui.components.diagnosis_results_view import render_diagnosis_results_cards
-from app.utils.auth import is_admin, require_login
+from app.utils.auth import is_expert, require_login
 from app.utils.validators import require_non_empty_selection
 
 PREFILL_KEY = "manual_diagnosis_prefill_symptom_ids"
@@ -129,7 +129,9 @@ def render_farmer_diagnosis(
     )
 
     target_farmer_id = farmer_id
-    if allow_farmer_select and is_admin() and st.session_state[step_key] == 1:
+    if not allow_farmer_select:
+        st.caption("This diagnosis will be saved directly to your farmer account.")
+    if allow_farmer_select and is_expert() and st.session_state[step_key] == 1:
         target_farmer_id = _render_farmer_selector(key_prefix)
 
     _render_stepper(st.session_state[step_key])
@@ -164,7 +166,7 @@ def render_farmer_diagnosis(
 
         service = DiagnosisService()
         ctype, resolved_farmer_id = service.resolve_consultation_type(
-            is_admin=is_admin() and allow_farmer_select,
+            is_admin=is_expert() and allow_farmer_select,
             farmer_id=target_farmer_id if allow_farmer_select else farmer_id,
             actor_farmer_id=user.get("farmer_id"),
         )

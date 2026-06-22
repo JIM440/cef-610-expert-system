@@ -26,6 +26,12 @@ class ConsultationService:
     def get_detail(self, consultation_id: int) -> list[dict]:
         return diag_repo.get_diagnosis_detail(consultation_id)
 
+    def get_summary(self, consultation_id: int) -> dict | None:
+        return repo.get_consultation_summary(consultation_id)
+
+    def get_latest_report(self, consultation_id: int) -> dict | None:
+        return report_repo.get_latest_report(consultation_id)
+
     def export_pdf(
         self,
         consultation_id: int,

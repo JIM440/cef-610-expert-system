@@ -42,10 +42,16 @@ def get_schema_issues() -> list[str]:
             )
             existing = set(cur.fetchall())
 
-    return [
+    issues = [
         f"{table_name}.{column_name}"
         for table_name, column_name in sorted(expected - existing)
     ]
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM role WHERE code = 'expert'")
+            if cur.fetchone() is None:
+                issues.append("role.expert")
+    return issues
 
 
 @contextmanager

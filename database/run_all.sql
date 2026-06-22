@@ -18,6 +18,7 @@
 \i migrations/014_image_consultation_types.sql
 \i migrations/015_consultation_source_match_tier.sql
 \i migrations/016_consultation_match_trace.sql
+\i migrations/017_create_expert_role.sql
 
 \echo 'Running seeds...'
 \i seeds/001_seed_crops.sql

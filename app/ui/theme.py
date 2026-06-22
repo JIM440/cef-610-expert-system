@@ -60,6 +60,17 @@ def inject_theme() -> None:
                 border-radius: 8px !important;
             }}
             h1, h2, h3 {{ color: var(--text); letter-spacing: 0; }}
+            div[data-baseweb="tab-list"] button:last-child {{
+                background: var(--amber) !important;
+                color: #fff !important;
+                border-radius: 8px 8px 0 0 !important;
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }}
+            div[data-baseweb="tab-list"] button:last-child p {{
+                color: #fff !important;
+                font-weight: 800 !important;
+            }}
             .stButton > button, button[data-testid^="stBaseButton"] {{
                 border-radius: 8px !important;
                 font-weight: 700 !important;

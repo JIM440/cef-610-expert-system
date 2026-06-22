@@ -3,6 +3,7 @@
 
 INSERT INTO role (code, label) VALUES
     ('admin', 'System Administrator'),
+    ('expert', 'Crop Expert'),
     ('farmer', 'Farmer')
 ON CONFLICT (code) DO NOTHING;
 
@@ -27,5 +28,5 @@ ON CONFLICT (username) DO NOTHING;
 INSERT INTO app_user (username, password_hash, role_id, farmer_id, full_name)
 SELECT 'expert', '34a6c1a9600377c8dc05ea00380f406fb52e8104e921dc6bd5869bfdf1516164',
        r.id, NULL, 'Crop Expert'
-FROM role r WHERE r.code = 'admin'
+FROM role r WHERE r.code = 'expert'
 ON CONFLICT (username) DO NOTHING;

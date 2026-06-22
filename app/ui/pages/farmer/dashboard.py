@@ -53,8 +53,9 @@ if history:
                 if hasattr(row["consultation_date"], "strftime")
                 else str(row["consultation_date"])[:10],
                 "Disease": row["diagnosed_disease"] or "-",
+                "Symptoms": row.get("symptoms") or "-",
                 "Confidence": row.get("confidence_score") or 0,
-                "Source": "Image" if row.get("source") == "IMAGE" else "Symptoms",
+                "Source": "Image recognition" if row.get("source") == "IMAGE" else "Manual",
             }
             for row in history[:4]
         ]
