@@ -1,4 +1,4 @@
-﻿import app.path_setup  # noqa: F401
+import app.path_setup  # noqa: F401
 
 import pandas as pd
 import streamlit as st
@@ -61,7 +61,7 @@ if history:
     )
     st.dataframe(
         table,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Confidence": st.column_config.ProgressColumn(

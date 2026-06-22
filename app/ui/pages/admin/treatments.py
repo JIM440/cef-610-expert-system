@@ -1,4 +1,4 @@
-﻿import app.path_setup  # noqa: F401
+import app.path_setup  # noqa: F401
 
 import pandas as pd
 import streamlit as st
@@ -26,7 +26,7 @@ tab1, tab2 = st.tabs(["All treatments", "Edit/Add"])
 with tab1:
     st.dataframe(
         pd.DataFrame(filtered),
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={"id": st.column_config.NumberColumn("ID", format="%d")},
     )

@@ -6,6 +6,12 @@ import psycopg2.extras
 
 from app.config import DB_CONFIG
 
+REQUIRED_SCHEMA_COLUMNS = {
+    "consultation": {"source", "gemini_raw_extraction", "match_tier"},
+    "consultation_symptom": {"matched"},
+    "consultation_environment": {"matched"},
+}
+
 
 def test_connection() -> tuple[bool, str]:
     try:
@@ -15,6 +21,31 @@ def test_connection() -> tuple[bool, str]:
         return True, ""
     except Exception as exc:
         return False, str(exc)
+
+
+def get_schema_issues() -> list[str]:
+    expected = {
+        (table_name, column_name)
+        for table_name, columns in REQUIRED_SCHEMA_COLUMNS.items()
+        for column_name in columns
+    }
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT table_name, column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ANY(%s)
+                """,
+                (list(REQUIRED_SCHEMA_COLUMNS),),
+            )
+            existing = set(cur.fetchall())
+
+    return [
+        f"{table_name}.{column_name}"
+        for table_name, column_name in sorted(expected - existing)
+    ]
 
 
 @contextmanager

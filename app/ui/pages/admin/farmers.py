@@ -55,7 +55,7 @@ with table_tab:
         ]
         st.dataframe(
             table,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             column_config={
                 "id": st.column_config.NumberColumn("ID", format="%d"),
@@ -140,7 +140,7 @@ with edit_tab:
                 )
                 st.dataframe(
                     history_table,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config={
                         "Date": st.column_config.DatetimeColumn(

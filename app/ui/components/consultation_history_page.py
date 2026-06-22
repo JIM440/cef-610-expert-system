@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import streamlit as st
 
 from app.repositories.user_repository import get_all_farmers
@@ -93,7 +93,7 @@ def render_consultation_history_page(
     df = _history_dataframe(history, show_farmer=show_farmer, show_source=show_source)
     event = st.dataframe(
         df,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         on_select="rerun",
         selection_mode="single-row",

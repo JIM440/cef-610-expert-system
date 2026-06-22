@@ -1,4 +1,4 @@
-﻿import app.path_setup  # noqa: F401
+import app.path_setup  # noqa: F401
 
 import pandas as pd
 import streamlit as st
@@ -39,7 +39,7 @@ if rules:
     df = pd.DataFrame(rules)
     st.dataframe(
         df[["id", "rule_name", "disease_name", "confidence_score", "active_status"]],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "id": st.column_config.NumberColumn("ID", format="%d"),

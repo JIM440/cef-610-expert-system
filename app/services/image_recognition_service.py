@@ -1,6 +1,5 @@
-﻿from app.config import GEMINI_CONFIG
+from app.config import GEMINI_CONFIG
 from app.ai.image_analyzer import analyze_image_bytes
-from app.ai.predict import predict_disease
 from app.database import execute
 from app.repositories.crop_repository import get_tomato_crop_id
 from app.services.diagnosis_service import DiagnosisService
@@ -57,8 +56,6 @@ class ImageRecognitionService:
             analysis.get("analysis_source", "gemini"),
             GEMINI_CONFIG.model,
         )
-        predict_disease(result["consultation_id"], symptom_ids, condition_value_ids or [])
-
         return {
             "analysis": analysis,
             "diagnosis": result,

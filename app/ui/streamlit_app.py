@@ -1,8 +1,8 @@
-﻿import app.path_setup  # noqa: F401 - project root on sys.path
+import app.path_setup  # noqa: F401 - project root on sys.path
 
 import streamlit as st
 
-from app.database import test_connection
+from app.database import get_schema_issues, test_connection
 from app.ui.components.login_page import render_login_page
 from app.ui.theme import configure_page, inject_theme, escape
 from app.utils.auth import current_user, ensure_authenticated, init_session, is_admin, logout_user
@@ -10,8 +10,17 @@ from app.utils.auth import current_user, ensure_authenticated, init_session, is_
 configure_page()
 init_session()
 
-if not test_connection()[0]:
-    st.error("Cannot connect to the database. Check `.env` and run `database/run_all.sql`.")
+connection_ok, connection_error = test_connection()
+if not connection_ok:
+    st.error(f"Cannot connect to the database: {connection_error}")
+    st.caption("Check `.env` and run `database/run_all.sql` for a new database.")
+    st.stop()
+
+schema_issues = get_schema_issues()
+if schema_issues:
+    st.error("The database schema is out of date.")
+    st.code("python scripts/apply_schema_updates.py")
+    st.caption("Missing columns: " + ", ".join(schema_issues))
     st.stop()
 
 if not current_user():
@@ -37,7 +46,7 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    if st.button("Log out", use_container_width=True):
+    if st.button("Log out", width="stretch"):
         logout_user()
         st.rerun()
 

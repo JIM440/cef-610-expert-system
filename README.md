@@ -1,121 +1,85 @@
 # Tomato Disease Expert System
 
-AI-powered expert system for **tomato** disease diagnosis and treatment recommendation (CEF610 Final Practical Project).
+A Streamlit and PostgreSQL expert system for diagnosing tomato plant diseases and recommending treatments.
 
-## Design principles
+## How diagnosis works
 
-- **Fully normalized PostgreSQL** — one value per cell
-- **No arrays or JSON lists** in the database
-- **Rules use foreign keys only** — symptoms and conditions linked via `rule_symptom` and `rule_environment`
-- **Diagnosis explanations stored traceably** — `diagnosis_result`, `diagnosis_reason`, and junction tables
+1. A user selects tomato symptoms manually, or uploads a tomato plant image.
+2. Gemini Vision extracts visible symptoms from the image.
+3. Extracted symptom names are mapped to symptom records in PostgreSQL.
+4. The rule-based inference engine evaluates the selected symptoms and environmental conditions.
+5. The matched database rule determines the disease, confidence tier, explanation, and treatment.
+6. The consultation and its matched evidence are stored for history and reporting.
 
-## Login (demo)
+Gemini does not make the final diagnosis. The database knowledge base and inference engine do.
+
+## Demo accounts
 
 | Username | Password | Role |
-|----------|----------|------|
-| admin | admin123 | Admin — full knowledge management |
-| expert | expert123 | Crop expert — same admin access as above |
-| farmer1 | farmer123 | Farmer — diagnosis and own history |
-
-**Not in scope:** Settings, About, AI Model Management pages.
-
-See `DESIGN.md` for the locked final architecture and `ARCHITECTURE.md` for the disease vs rule knowledge separation.
-
-## Project structure
-
-```
-crop-disease-expert-system/
-├── app/                    # Python application
-│   ├── expert_system/      # Rule-based inference engine
-│   ├── ai/                 # ML training and prediction
-│   ├── repositories/       # Database access layer
-│   ├── services/           # Business logic
-│   └── ui/                 # Streamlit interface
-├── database/
-│   ├── migrations/         # 001–007 table creation scripts
-│   ├── seeds/              # Reference data (tomato diseases, rules)
-│   ├── queries/            # Reusable SQL queries
-│   ├── schema.sql          # Migration index
-│   ├── run_all.sql         # One-command DB setup
-│   └── ERD.md              # Entity-relationship diagram
-├── data/                   # Training datasets
-├── reports/                # Evaluation and technical reports
-└── tests/
-```
+|---|---|---|
+| `admin` | `admin123` | Administrator |
+| `expert` | `expert123` | Crop expert |
+| `farmer1` | `farmer123` | Farmer |
 
 ## Setup
 
-### 1. PostgreSQL
+### 1. Install dependencies
 
-```bash
-createdb crop_expert_system
-```
-
-### 2. Run SQL scripts
-
-From the `database/` folder:
-
-```bash
-psql -U postgres -d crop_expert_system -f run_all.sql
-```
-
-Or run migrations and seeds individually in numeric order.
-
-### 3. Python environment
-
-```bash
+```powershell
 python -m venv .venv
-.venv\Scripts\activate        # Windows
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env        # then edit DB credentials
+Copy-Item .env.example .env
 ```
 
-### 4. Launch UI
+Update `.env` with the PostgreSQL password and Gemini API key.
 
-Use **one** of these (avoids `ModuleNotFoundError: No module named 'app'`):
+### 2. Create a fresh database
 
-```bash
+```powershell
+createdb crop_expert_system
+Set-Location database
+psql -U postgres -d crop_expert_system -f run_all.sql
+Set-Location ..
+```
+
+### 3. Update an existing database
+
+After pulling application changes, run:
+
+```powershell
+python scripts/apply_schema_updates.py
+```
+
+This command safely applies the current idempotent schema updates. The application also checks required columns at startup and reports missing schema changes clearly.
+
+### 4. Launch the application
+
+```powershell
 python run.py
 ```
 
-Or install the package once, then use Streamlit directly:
+## Project structure
 
-```bash
-pip install -e .
-streamlit run app/ui/streamlit_app.py
+```text
+app/
+  ai/                 Gemini image symptom extraction
+  expert_system/      Rule matching and inference
+  repositories/       PostgreSQL data access
+  services/           Diagnosis and reporting workflows
+  ui/                 Streamlit pages and components
+database/
+  migrations/         Ordered schema changes
+  seeds/              Tomato diseases, symptoms, rules, and treatments
+  queries/            Reusable reporting queries
+scripts/               Schema and Gemini verification commands
+tests/                 Automated tests
 ```
-
-## Diagnosis explanation tables
-
-| Table | Role |
-|-------|------|
-| `diagnosis_result` | Final disease, title, explanation, confidence |
-| `diagnosis_reason` | Each "why" with `reason_type` FK |
-| `diagnosis_reason_symptom` | Symptoms that supported the diagnosis |
-| `diagnosis_reason_environment` | Environmental factors that supported it |
-| `diagnosis_rule_match` | Expert rules that fired |
-
-## Phases covered
-
-| Phase | Location |
-|-------|----------|
-| Database design | `database/migrations/`, `database/ERD.md` |
-| Knowledge base | `database/seeds/` |
-| Inference engine | `app/expert_system/` |
-| PostgreSQL integration | `app/repositories/`, `app/database.py` |
-| AI prediction | `app/ai/` |
-| Hybrid system | `app/services/diagnosis_service.py` + `app/ai/predict.py` |
-| UI | `app/ui/` |
-| Testing | `tests/` |
 
 ## Tests
 
-```bash
-pytest tests/ -k "not integration"
+```powershell
+python -m pytest -q
 ```
 
-Integration tests require a seeded database:
-
-```bash
-pytest tests/ -m integration
-```
+See `DESIGN.md`, `ARCHITECTURE.md`, and `database/SCHEMA_AUDIT.md` for implementation details.

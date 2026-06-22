@@ -1,4 +1,4 @@
-﻿import app.path_setup  # noqa: F401
+import app.path_setup  # noqa: F401
 
 import pandas as pd
 import streamlit as st
@@ -50,6 +50,7 @@ if disease_stats:
     df_freq = pd.DataFrame(disease_stats)
     name_col = "disease_name" if "disease_name" in df_freq.columns else df_freq.columns[0]
     count_col = "count" if "count" in df_freq.columns else "cnt" if "cnt" in df_freq.columns else df_freq.columns[-1]
+    df_freq[count_col] = pd.to_numeric(df_freq[count_col], errors="coerce").fillna(0).astype(int)
     st.bar_chart(df_freq.set_index(name_col)[count_col])
 else:
     st.info("No diagnosed diseases yet.")
@@ -72,7 +73,7 @@ if history:
     )
     st.dataframe(
         table,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Confidence": st.column_config.ProgressColumn(

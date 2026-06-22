@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 
 from app.config import GEMINI_CONFIG
 from app.repositories.crop_repository import get_tomato_crop_id
@@ -70,7 +70,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
             if st.button(
                 "Continue to manual diagnosis with these symptoms",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
             ):
                 _continue_to_manual(analysis.get("symptom_ids", []))
         else:
@@ -97,7 +97,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
                 if uploaded.size > MAX_BYTES:
                     st.error("File exceeds 5MB limit.")
                     st.stop()
-                st.image(uploaded, caption="Uploaded image", use_container_width=True)
+                st.image(uploaded, caption="Uploaded image", width="stretch")
 
     with col_help:
         with st.container(border=True):
@@ -130,7 +130,7 @@ def render_image_recognition_page(allow_farmer_select: bool = False) -> None:
         else:
             target_farmer_id = None
 
-    if uploaded and st.button("Analyze Image", type="primary", use_container_width=True):
+    if uploaded and st.button("Analyze Image", type="primary", width="stretch"):
         service = ImageRecognitionService()
         ctype, fid = service.resolve_image_consultation_type(
             is_admin=is_admin(),

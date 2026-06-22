@@ -1,6 +1,5 @@
-﻿import streamlit as st
+import streamlit as st
 
-from app.ai.predict import predict_disease
 from app.repositories.crop_repository import get_tomato_crop_id
 from app.repositories.symptom_repository import get_all_symptoms, get_environmental_conditions
 from app.repositories.user_repository import get_all_farmers
@@ -157,7 +156,7 @@ def render_farmer_diagnosis(
         env_rows = get_environmental_conditions()
         selected_condition_ids = _render_environment_selectors(env_rows, key_prefix)
 
-    if st.button("Get Diagnosis", type="primary", use_container_width=True):
+    if st.button("Get Diagnosis", type="primary", width="stretch"):
         error = require_non_empty_selection("symptom", selected_symptom_ids)
         if error:
             st.error(error)
@@ -180,12 +179,6 @@ def render_farmer_diagnosis(
         if not result:
             st.warning("No expert rule could be scored for these symptoms.")
             return
-
-        predict_disease(
-            result["consultation_id"],
-            selected_symptom_ids,
-            selected_condition_ids,
-        )
 
         st.session_state[result_key] = result
         st.session_state[step_key] = 2

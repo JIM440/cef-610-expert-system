@@ -24,7 +24,7 @@ def render_login_page() -> None:
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Enter your username")
         password = st.text_input("Password", type="password", placeholder="Enter your password")
-        submitted = st.form_submit_button("Login", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Login", type="primary", width="stretch")
 
     if submitted:
         if not username.strip() or not password:
