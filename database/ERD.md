@@ -1,40 +1,39 @@
-# Entity-Relationship Diagram (Final)
+# Entity-Relationship Diagram
+
+The production schema contains exactly 15 application tables.
 
 ```mermaid
 erDiagram
-    role ||--o{ app_user : has
-    farmer ||--o{ app_user : linked_to
-    farmer ||--o{ consultation : requests
-    crop ||--o{ disease : has
-    disease ||--o{ disease_symptom : links
-    symptom ||--o{ disease_symptom : links
-    disease ||--o{ disease_treatment : links
-    treatment ||--o{ disease_treatment : links
-    disease ||--o{ rule : defines
+    app_user ||--o{ consultation : performs
+    app_user ||--o{ consultation : owns
+    crop ||--o{ disease : contains
+    crop ||--o{ consultation : concerns
+    disease ||--o{ disease_symptom : has
+    symptom ||--o{ disease_symptom : describes
+    disease ||--o{ rule : diagnosed_by
+    disease ||--o{ consultation : result
     rule ||--o{ rule_symptom : requires
+    symptom ||--o{ rule_symptom : participates
     rule ||--o{ rule_environment : requires
+    environmental_factor ||--o{ rule_environment : participates
     rule ||--o{ rule_treatment : recommends
-    treatment ||--o{ rule_treatment : linked
-    consultation ||--o{ diagnosis_result : produces
-    diagnosis_result ||--o{ diagnosis_reason : explains
-    diagnosis_result ||--o{ diagnosis_rule_match : matched
-    consultation ||--o{ consultation_report : exports
-    consultation ||--o{ ai_prediction : predicts
+    treatment ||--o{ rule_treatment : participates
+    rule ||--o{ consultation : matched
+    consultation ||--o{ consultation_symptom : records
+    symptom ||--o{ consultation_symptom : selected
+    consultation ||--o{ consultation_environment : records
+    environmental_factor ||--o{ consultation_environment : selected
+    consultation ||--o{ consultation_treatment : recommends
+    treatment ||--o{ consultation_treatment : selected
 ```
 
-## Key separation
+## Table groups
 
-| Layer | Tables | Stores |
-|-------|--------|--------|
-| Disease knowledge | `disease_symptom`, `disease_environment` | Factual relationships |
-| Rule knowledge | `rule_symptom`, `rule_environment`, `rule_treatment` | Diagnostic logic + treatments |
-| Explanations | `diagnosis_result`, `diagnosis_reason`, `diagnosis_rule_match` | Result + traceable reasons |
+| Group | Tables |
+|---|---|
+| Users | `app_user` |
+| Knowledge base | `crop`, `disease`, `symptom`, `treatment`, `environmental_factor`, `disease_symptom` |
+| Expert rules | `rule`, `rule_symptom`, `rule_environment`, `rule_treatment` |
+| Consultations | `consultation`, `consultation_symptom`, `consultation_environment`, `consultation_treatment` |
 
-## SQL script locations
-
-| Folder | Purpose |
-|--------|---------|
-| `migrations/001`–`010` | Schema creation |
-| `seeds/001`–`008` | Reference data + demo users |
-| `queries/` | Reusable SELECT queries |
-| `run_all.sql` | Full setup |
+`database/schema.sql` is the canonical schema. `database/seed.sql` contains the current knowledge base and demo data.

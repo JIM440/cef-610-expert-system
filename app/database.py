@@ -7,9 +7,12 @@ import psycopg2.extras
 from app.config import DB_CONFIG
 
 REQUIRED_SCHEMA_COLUMNS = {
-    "consultation": {"source", "gemini_raw_extraction", "match_tier"},
+    "app_user": {"role", "phone_number", "location", "email", "updated_at"},
+    "consultation": {"source", "gemini_raw_extraction", "match_tier", "final_disease_id", "final_confidence", "matched_rule_id", "explanation"},
     "consultation_symptom": {"matched"},
-    "consultation_environment": {"matched"},
+    "consultation_environment": {"environmental_factor_id", "matched"},
+    "rule_environment": {"environmental_factor_id"},
+    "environmental_factor": {"category", "value_name", "unit"},
 }
 
 
@@ -48,9 +51,20 @@ def get_schema_issues() -> list[str]:
     ]
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM role WHERE code = 'expert'")
+            cur.execute(
+                """
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_type = 'BASE TABLE'
+                """
+            )
+            table_count = cur.fetchone()[0]
+            if table_count != 15:
+                issues.append(f"public_table_count.expected_15_found_{table_count}")
+            cur.execute("SELECT 1 FROM app_user WHERE role = 'EXPERT' AND is_active = TRUE LIMIT 1")
             if cur.fetchone() is None:
-                issues.append("role.expert")
+                issues.append("app_user.expert")
     return issues
 
 

@@ -1,6 +1,4 @@
 from app.repositories import consultation_repository as repo
-from app.repositories import diagnosis_repository as diag_repo
-from app.repositories import report_repository as report_repo
 from app.services.pdf_service import PdfService
 
 
@@ -24,13 +22,21 @@ class ConsultationService:
         return repo.get_consultation_image(consultation_id)
 
     def get_detail(self, consultation_id: int) -> list[dict]:
-        return diag_repo.get_diagnosis_detail(consultation_id)
+        return repo.get_diagnosis_detail(consultation_id)
 
     def get_summary(self, consultation_id: int) -> dict | None:
         return repo.get_consultation_summary(consultation_id)
 
     def get_latest_report(self, consultation_id: int) -> dict | None:
-        return report_repo.get_latest_report(consultation_id)
+        summary = repo.get_consultation_summary(consultation_id)
+        if not summary:
+            return None
+        return {
+            "report_title": f"Consultation Report #{consultation_id}",
+            "summary": summary.get("explanation") or "",
+            "notes": "",
+            "recommendations": summary.get("treatments") or "",
+        }
 
     def export_pdf(
         self,
@@ -40,9 +46,6 @@ class ConsultationService:
         notes: str,
         recommendations: str,
     ) -> bytes:
-        report_repo.save_consultation_report(
-            consultation_id, report_title, summary, notes, recommendations
-        )
         return self.pdf.build_consultation_pdf(
             consultation_id, report_title, summary, notes, recommendations
         )

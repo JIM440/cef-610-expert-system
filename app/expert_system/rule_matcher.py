@@ -49,10 +49,11 @@ def build_rule_definitions(rows: list[dict]) -> dict[int, RuleDefinition]:
         if row["symptom_id"] and row.get("symptom_required", True):
             rule.required_symptoms.add(row["symptom_id"])
             rule.symptom_names[row["symptom_id"]] = row["symptom_name"]
-        if row["condition_value_id"] and row.get("condition_required", True):
-            rule.required_conditions.add(row["condition_value_id"])
+        factor_id = row.get("environmental_factor_id") or row.get("condition_value_id")
+        if factor_id and row.get("condition_required", True):
+            rule.required_conditions.add(factor_id)
             label = f"{row['condition_name']}: {row['condition_value']}"
-            rule.condition_labels[row["condition_value_id"]] = label
+            rule.condition_labels[factor_id] = label
     return rules
 
 

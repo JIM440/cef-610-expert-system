@@ -9,12 +9,10 @@ from app.repositories.disease_repository import (
     get_all_diseases,
     get_disease_knowledge_summary,
     link_disease_symptom,
-    link_disease_treatment,
     unlink_disease_symptom,
     update_disease,
 )
 from app.repositories.symptom_repository import get_all_symptoms
-from app.repositories.treatment_repository import get_all_treatments
 from app.ui.components.farmer_theme import render_page_header
 from app.utils.auth import require_expert
 
@@ -89,21 +87,16 @@ with edit_tab:
                     unlink_disease_symptom(did, remove_sid)
                     st.rerun()
         with c2:
-            st.markdown("**Treatment associations**")
+            st.markdown("**Rule-derived treatments**")
             for treatment in summary["treatments"]:
                 st.write(f"- {treatment['name']}")
-            all_treatments = get_all_treatments()
-            linked_treatments = {t["id"] for t in summary["treatments"]}
-            available_treatments = [t for t in all_treatments if t["id"] not in linked_treatments]
-            if available_treatments:
-                tid = st.selectbox("Add treatment", [t["id"] for t in available_treatments], format_func=lambda i: next(t["name"] for t in available_treatments if t["id"] == i))
-                priority = st.number_input("Treatment priority", min_value=1, max_value=5, value=1)
-                if st.button("Link treatment"):
-                    link_disease_treatment(did, tid, priority)
-                    st.rerun()
-            st.markdown("**Environmental facts**")
+            if not summary["treatments"]:
+                st.caption("Add treatments from the Expert Rules page.")
+            st.markdown("**Rule-derived environmental facts**")
             for environment in summary["environments"]:
                 st.write(f"- {environment['condition_name']}: {environment['value_name']}")
+            if not summary["environments"]:
+                st.caption("Add conditions from the Expert Rules page.")
 
         confirm = st.checkbox("I understand deleting this disease also removes its linked rules.")
         if st.button("Delete disease", disabled=not confirm):
@@ -126,5 +119,5 @@ with add_tab:
                 st.error("Disease name is required.")
             else:
                 create_disease(crop_id, name.strip(), description.strip(), template.strip())
-                st.success("Disease added. Use Edit disease to link symptoms and treatments.")
+                st.success("Disease added. Use Edit disease to link symptoms, then Expert Rules to assign treatments and conditions.")
                 st.rerun()

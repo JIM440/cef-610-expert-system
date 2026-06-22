@@ -1,6 +1,5 @@
 from app.expert_system.inference_engine import InferenceEngine
 from app.repositories import consultation_repository as consult_repo
-from app.repositories import diagnosis_repository as diag_repo
 from app.repositories import disease_repository as disease_repo
 from app.repositories import rule_repository as rule_repo
 from app.utils.consultation_types import (
@@ -39,6 +38,8 @@ class DiagnosisService:
             source=source,
             match_tier=result.match_tier,
             gemini_raw_extraction=gemini_raw_extraction,
+            matched_rule_id=result.best_match.rule_id,
+            explanation=result.explanation,
         )
 
         matched_symptoms = set(result.best_match.matched_symptom_ids)
@@ -62,50 +63,10 @@ class DiagnosisService:
         for t in treatments:
             consult_repo.add_consultation_treatment(consultation_id, t["id"])
 
-        result_id = diag_repo.save_diagnosis_result(
-            consultation_id,
-            result.disease_id,
-            result.result_title,
-            result.explanation,
-            result.confidence,
-        )
-
-        symptom_type_id = diag_repo.get_reason_type_id("symptom_match")
-        env_type_id = diag_repo.get_reason_type_id("environment_match")
-        rule_type_id = diag_repo.get_reason_type_id("rule_match")
-
-        order = 0
-        if symptom_type_id and result.reason_lines["symptoms"]:
-            reason_id = diag_repo.save_diagnosis_reason(
-                result_id, symptom_type_id, None, order
-            )
-            for sid in result.best_match.matched_symptom_ids:
-                diag_repo.link_reason_symptom(reason_id, sid)
-            order += 1
-
-        if env_type_id and result.reason_lines["conditions"]:
-            reason_id = diag_repo.save_diagnosis_reason(
-                result_id, env_type_id, None, order
-            )
-            for cid in result.best_match.matched_condition_ids:
-                diag_repo.link_reason_environment(reason_id, cid)
-            order += 1
-
-        if rule_type_id:
-            diag_repo.save_diagnosis_reason(
-                result_id,
-                rule_type_id,
-                result.best_match.rule_id,
-                order,
-            )
-            diag_repo.save_rule_match(
-                result_id, result.best_match.rule_id, result.best_match.matched_score
-            )
-
         return {
             "consultation_id": consultation_id,
             "consultation_type": consultation_type,
-            "diagnosis_result_id": result_id,
+            "diagnosis_result_id": consultation_id,
             "disease_id": result.disease_id,
             "disease_name": result.disease_name,
             "result_title": result.result_title,

@@ -86,6 +86,14 @@ def inject_theme() -> None:
                 overflow: hidden;
                 background: var(--surface);
             }}
+            div[data-testid="stVerticalBlockBorderWrapper"] {{
+                background: #FFFFFF !important;
+                border-color: var(--line) !important;
+                border-radius: 8px !important;
+            }}
+            div[data-testid="stVerticalBlockBorderWrapper"] > div {{
+                background: #FFFFFF !important;
+            }}
             .app-card, .result-card {{
                 background: var(--surface);
                 border: 1px solid var(--line);

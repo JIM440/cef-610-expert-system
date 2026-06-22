@@ -2,24 +2,24 @@
 
 Audit date: 2026-06-22
 
-## Current application schema
+## Result
 
-- Login accounts are stored in `app_user` and reference database roles through `role`.
-- Database roles include `admin`, `expert`, and `farmer`.
-- The `expert` demo account is assigned to the `expert` role by migration `017`.
-- Farmer profile data remains separate from login credentials.
-- Manual and image diagnoses store their source, confidence tier, and matched evidence.
-- Gemini-extracted symptoms are mapped to `symptom` records and stored in `consultation_symptom`.
-- `consultation_symptom.matched` and `consultation_environment.matched` identify facts used by the selected rule.
-- Diagnosis explanations remain traceable through `diagnosis_result`, `diagnosis_reason`, and `diagnosis_rule_match`.
-- Editable PDF report content is stored in `consultation_report` before download.
+- The live PostgreSQL database contains exactly 15 public application tables.
+- `app_user` stores login credentials, roles, and farmer profile data.
+- Roles are constrained values on `app_user.role`: `ADMIN`, `EXPERT`, or `FARMER`.
+- `environmental_factor` replaces the former condition/value table pair.
+- The final diagnosis, confidence, matched rule, and explanation are stored on `consultation`.
+- Gemini is used only to extract visible tomato symptoms. Final diagnosis remains database rule-driven.
+- Reports are generated on demand from consultation data and are not persisted.
+- No migration-tracking table is present.
 
-## Deliberately normalized structures
+## Canonical database files
 
-- Environmental factors remain split between `environmental_condition` and `environmental_condition_value`.
-- Disease facts and diagnosis rules remain separate: disease associations describe knowledge, while rule junction tables drive inference.
-- Treatment recommendations can be linked to diseases generally and to individual rules with priority.
+| File | Purpose |
+|---|---|
+| `schema.sql` | Exact 15-table schema |
+| `seed.sql` | Current knowledge base, demo users, and retained consultation data |
+| `consolidate_29_to_15.sql` | Reviewed one-time migration from the legacy schema |
+| `CONSOLIDATION_REPORT.md` | Pre/post row-count verification |
 
-## Removed legacy path
-
-The unused Random Forest training and prediction modules were removed. Gemini extracts image symptoms, while the database rule engine remains the only final diagnosis authority.
+The obsolete migration, seed-fragment, and query folders were removed after consolidation.

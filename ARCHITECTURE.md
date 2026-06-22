@@ -1,180 +1,51 @@
-# Disease Knowledge vs Rule Knowledge
+# System Architecture
 
-This is one of the most important architectural decisions in the project. Many student projects combine these into a single table. It works initially, but becomes hard to maintain. Separating them mirrors how real expert systems are built.
-
----
-
-## The difference
-
-| Layer | Question | Nature |
-|-------|----------|--------|
-| **Disease Knowledge** | What do we know about a disease? | **Facts** |
-| **Rule Knowledge** | When should the system conclude this disease exists? | **Reasoning** |
-
-### Disease knowledge = facts
+## Diagnosis pipeline
 
 ```text
-Early Blight commonly causes:
-- Yellow Leaves
-- Brown Spots
-- Leaf Drop
+Manual selection or tomato image
+             |
+             v
+Database symptom and environmental-factor IDs
+             |
+             v
+RuleMatcher evaluates active PostgreSQL rules
+             |
+             v
+InferenceEngine selects the best rule
+             |
+             v
+Consultation stores disease, confidence, rule, explanation, evidence, and treatments
+             |
+             v
+History dashboard and on-demand PDF report
 ```
 
-Nobody is making a diagnosis yet. We are stating: *these symptoms are associated with this disease.*
+For image recognition, Gemini returns visible symptom names and a visual summary. The application maps those names to the existing `symptom` rows before invoking the same rule engine used by manual diagnosis.
 
-### Rule knowledge = reasoning
+## Application layers
 
-```text
-IF Yellow Leaves AND Brown Spots AND High Humidity
-THEN Early Blight (Confidence = 85%)
-```
+| Layer | Responsibility |
+|---|---|
+| `app/ui` | Streamlit navigation, forms, cards, history, and PDF export workflow |
+| `app/services` | Diagnosis, image-recognition, consultation, and reporting workflows |
+| `app/expert_system` | Rule grouping, scoring, fallback matching, and inference |
+| `app/repositories` | SQL access to the consolidated schema |
+| `app/ai` | Gemini connection and structured symptom extraction |
+| `database` | Canonical schema, current seed data, and one-time consolidation SQL |
 
-The system is making a **decision**.
+## Knowledge model
 
----
+`disease_symptom` stores descriptive disease knowledge for disease views. Diagnostic decisions use `rule`, `rule_symptom`, `rule_environment`, and `rule_treatment`.
 
-## Real-world analogy
+Environmental choices are normalized as rows in `environmental_factor`, each containing a category, value name, and optional unit.
 
-A doctor knows fever is associated with malaria, typhoid, flu, and COVID — that is **disease knowledge**.
+## Consultation model
 
-But the doctor reasons: *IF fever AND headache AND chills THEN possible malaria* — that is **rule knowledge**.
+`consultation` is one diagnosis event. It stores the actor, optional farmer, crop, source, final disease, confidence, matched rule, explanation, and Gemini extraction text. Its three junction tables record the selected/matched symptoms, environmental factors, and recommended treatments.
 
----
+PDF reports are assembled from these tables when requested. No report record or uploaded image record is persisted.
 
-## Disease knowledge tables
+## Authentication
 
-| Table | Role |
-|-------|------|
-| `disease` | Disease entities |
-| `symptom` | Reusable symptom entities |
-| `disease_symptom` | Factual symptom associations |
-| `disease_environment` | Factual environmental associations |
-| `disease_treatment` | General treatments linked to disease |
-
-`disease_symptom` does **not** mean “diagnose the disease.” It means “these symptoms are known to occur with this disease.”
-
-### Why keep disease_symptom?
-
-The **Diseases** page and disease detail views need it:
-
-```text
-Early Blight
-Common Symptoms:
-- Yellow Leaves
-- Brown Spots
-- Leaf Drop
-```
-
-Without `disease_symptom`, the disease knowledge UI is impossible.
-
----
-
-## Rule knowledge tables
-
-| Table | Role |
-|-------|------|
-| `rule` | Diagnostic rule linked to one disease |
-| `rule_symptom` | Symptoms **required** for this rule to fire |
-| `rule_environment` | Conditions **required** for this rule |
-| `rule_treatment` | Treatments recommended when this rule matches |
-
----
-
-## Why not use disease_symptom for diagnosis?
-
-Not every associated symptom is required for diagnosis.
-
-**Early Blight** may be associated with:
-
-- Yellow Leaves
-- Brown Spots
-- Leaf Drop
-
-But a rule might only require:
-
-- Brown Spots
-- Yellow Leaves
-- High Humidity
-
-`Leaf Drop` is associated with the disease but **not required** by the rule. That is why the tables stay separate.
-
-### Example in our seed data
-
-| Knowledge | Early Blight |
-|-----------|--------------|
-| `disease_symptom` | Brown spots, Yellowing, **Leaf drop** |
-| `EB-Rule-01` requires | Brown spots, Yellowing, High humidity |
-
-Leaf drop appears in facts but not in the rule — exactly as designed.
-
----
-
-## Benefits during diagnosis
-
-**Farmer selects:** Yellow Leaves, Brown Spots
-
-| Component | Reads from | Result |
-|-----------|------------|--------|
-| Inference engine | `rule_symptom` | Rule matched |
-| Disease detail / result card | `disease_symptom` | Shows all common symptoms, marks which were observed |
-
-Different tables, different purpose.
-
----
-
-## Benefits during AI training
-
-```text
-Disease Knowledge  →  AI learns disease ↔ symptom relationships
-Rule Knowledge     →  Expert system reasoning layer
-                              ↓
-                      Hybrid Diagnosis
-                              ↓
-                        Treatments
-```
-
-```text
-                Symptoms
-                     ↓
-          ┌──────────────────┐
-          │ Expert System    │
-          │ (Rules)          │
-          └──────────────────┘
-                     ↓
-          ┌──────────────────┐
-          │ AI Predictor     │
-          └──────────────────┘
-                     ↓
-          Hybrid Diagnosis
-                     ↓
-               Treatments
-```
-
----
-
-## Repository separation
-
-### `DiseaseRepository`
-
-Manages: `disease`, `disease_symptom`, `disease_environment`, `disease_treatment`
-
-Used by: Diseases page, disease details, knowledge base, reports, AI training context
-
-### `RuleRepository`
-
-Manages: `rule`, `rule_symptom`, `rule_environment`, `rule_treatment`
-
-Used by: `InferenceEngine`, diagnosis service, confidence calculator, explanation builder
-
-**The inference engine never reads `disease_symptom` for matching.**
-
----
-
-## Final principle
-
-```text
-Disease Knowledge → "What is true about this disease?"
-Rule Knowledge    → "When should I diagnose this disease?"
-```
-
-This separation supports the Expert System phase, the AI phase, and the Hybrid phase without redesigning the database.
+All users are stored in `app_user`. `role` is constrained to `ADMIN`, `EXPERT`, or `FARMER`; authentication and sidebar access are database-driven.

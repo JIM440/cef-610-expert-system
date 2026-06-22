@@ -13,14 +13,14 @@ init_session()
 connection_ok, connection_error = test_connection()
 if not connection_ok:
     st.error(f"Cannot connect to the database: {connection_error}")
-    st.caption("Check `.env` and run `database/run_all.sql` for a new database.")
+    st.caption("Check `.env`, then apply `database/schema.sql` and `database/seed.sql`.")
     st.stop()
 
 schema_issues = get_schema_issues()
 if schema_issues:
     st.error("The database schema is out of date.")
-    st.code("python scripts/apply_schema_updates.py")
-    st.caption("Missing columns: " + ", ".join(schema_issues))
+    st.code("psql -U postgres -d crop_expert_system -f database/schema.sql")
+    st.caption("Schema issues: " + ", ".join(schema_issues))
     st.stop()
 
 if not current_user():

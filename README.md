@@ -38,26 +38,18 @@ Update `.env` with the PostgreSQL password and Gemini API key.
 
 ```powershell
 createdb crop_expert_system
-Set-Location database
-psql -U postgres -d crop_expert_system -f run_all.sql
-Set-Location ..
+psql -U postgres -d crop_expert_system -f database/schema.sql
+psql -U postgres -d crop_expert_system -f database/seed.sql
 ```
 
-### 3. Update an existing database
+### 3. Consolidate a legacy database
 
-After pulling application changes, apply the SQL updates directly:
+Back up the database first, then run the reviewed one-time consolidation:
 
 ```powershell
-psql -U postgres -d crop_expert_system -f database/apply_current_updates.sql
+pg_dump -U postgres -Fc crop_expert_system -f crop_expert_pre_consolidation.dump
+psql -U postgres -d crop_expert_system -f database/consolidate_29_to_15.sql
 ```
-
-Alternatively, use the Python migration runner:
-
-```powershell
-python scripts/apply_schema_updates.py
-```
-
-Both commands safely apply the current idempotent schema updates, including the database-backed `expert` role.
 
 ### 4. Launch the application
 
@@ -75,10 +67,10 @@ app/
   services/           Diagnosis and reporting workflows
   ui/                 Streamlit pages and components
 database/
-  migrations/         Ordered schema changes
-  seeds/              Tomato diseases, symptoms, rules, and treatments
-  queries/            Reusable reporting queries
-scripts/               Schema and Gemini verification commands
+  schema.sql           Canonical 15-table PostgreSQL schema
+  seed.sql             Current tomato knowledge base and demo data
+  consolidate_29_to_15.sql  One-time legacy consolidation
+scripts/               Gemini verification commands
 tests/                 Automated tests
 ```
 

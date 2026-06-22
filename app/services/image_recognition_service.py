@@ -1,6 +1,4 @@
-from app.config import GEMINI_CONFIG
 from app.ai.image_analyzer import analyze_image_bytes
-from app.database import execute
 from app.repositories.crop_repository import get_tomato_crop_id
 from app.services.diagnosis_service import DiagnosisService
 from app.utils.consultation_types import (
@@ -48,14 +46,6 @@ class ImageRecognitionService:
         if not result:
             return {"analysis": analysis, "diagnosis": None}
 
-        self._save_analysis_record(
-            result["consultation_id"],
-            original_filename,
-            analysis["analysis_summary"],
-            analysis.get("visual_summary", ""),
-            analysis.get("analysis_source", "gemini"),
-            GEMINI_CONFIG.model,
-        )
         return {
             "analysis": analysis,
             "diagnosis": result,
@@ -85,33 +75,3 @@ class ImageRecognitionService:
                 f"- {item['symptom_name']} ({item['score']}%)" for item in detected
             )
         return "\n".join(lines) or analysis.get("analysis_summary", "")
-
-    def _save_analysis_record(
-        self,
-        consultation_id: int,
-        original_filename: str,
-        analysis_summary: str,
-        visual_summary: str,
-        analysis_source: str,
-        gemini_model: str,
-    ) -> None:
-        execute(
-            """
-            INSERT INTO consultation_image (
-                consultation_id, original_filename, analysis_summary,
-                visual_summary, analysis_source, gemini_model
-            )
-            VALUES (
-                %(cid)s, %(name)s, %(summary)s,
-                %(visual)s, %(source)s, %(model)s
-            )
-            """,
-            {
-                "cid": consultation_id,
-                "name": original_filename,
-                "summary": analysis_summary,
-                "visual": visual_summary or None,
-                "source": analysis_source,
-                "model": gemini_model,
-            },
-        )

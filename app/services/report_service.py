@@ -6,10 +6,10 @@ class ReportService:
         return fetch_all(
             """
             SELECT d.name AS disease_name, COUNT(c.id) AS consultation_count,
-                   ROUND(AVG(c.confidence_score), 1) AS avg_confidence
+                   ROUND(AVG(c.final_confidence), 1) AS avg_confidence
             FROM consultation c
-            JOIN disease d ON d.id = c.diagnosis_disease_id
-            WHERE c.diagnosis_disease_id IS NOT NULL
+            JOIN disease d ON d.id = c.final_disease_id
+            WHERE c.final_disease_id IS NOT NULL
             GROUP BY d.id, d.name
             ORDER BY consultation_count DESC
             """

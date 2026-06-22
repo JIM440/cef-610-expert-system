@@ -1,17 +1,6 @@
 from app.database import execute, fetch_all, fetch_one
 
 
-def create_farmer(full_name: str, phone: str, location: str) -> int:
-    return execute(
-        """
-        INSERT INTO farmer (full_name, phone_number, location)
-        VALUES (%(full_name)s, %(phone)s, %(location)s)
-        RETURNING id
-        """,
-        {"full_name": full_name, "phone": phone, "location": location},
-    )
-
-
 def create_consultation(
     performed_by_user_id: int,
     consultation_type: str,
@@ -22,18 +11,22 @@ def create_consultation(
     source: str = "SYMPTOMS",
     match_tier: str = "HIGH",
     gemini_raw_extraction: str | None = None,
+    matched_rule_id: int | None = None,
+    explanation: str | None = None,
 ) -> int:
     return execute(
         """
         INSERT INTO consultation (
             performed_by_user_id, farmer_id, crop_id,
-            diagnosis_disease_id, confidence_score, consultation_type,
-            source, match_tier, gemini_raw_extraction
+            final_disease_id, final_confidence, consultation_type,
+            source, match_tier, gemini_raw_extraction,
+            matched_rule_id, explanation
         )
         VALUES (
             %(performed_by)s, %(farmer_id)s, %(crop_id)s,
             %(disease_id)s, %(confidence)s, %(ctype)s,
-            %(source)s, %(match_tier)s, %(gemini_raw)s
+            %(source)s, %(match_tier)s, %(gemini_raw)s,
+            %(matched_rule_id)s, %(explanation)s
         )
         RETURNING id
         """,
@@ -47,49 +40,36 @@ def create_consultation(
             "source": source,
             "match_tier": match_tier,
             "gemini_raw": gemini_raw_extraction,
+            "matched_rule_id": matched_rule_id,
+            "explanation": explanation,
         },
     )
 
 
-def add_consultation_symptom(
-    consultation_id: int,
-    symptom_id: int,
-    matched: bool = False,
-) -> None:
+def add_consultation_symptom(consultation_id: int, symptom_id: int, matched: bool = False) -> None:
     execute(
         """
         INSERT INTO consultation_symptom (consultation_id, symptom_id, matched)
         VALUES (%(consultation_id)s, %(symptom_id)s, %(matched)s)
         ON CONFLICT (consultation_id, symptom_id)
-        DO UPDATE SET matched = EXCLUDED.matched
+        DO UPDATE SET matched=EXCLUDED.matched
         """,
-        {
-            "consultation_id": consultation_id,
-            "symptom_id": symptom_id,
-            "matched": matched,
-        },
+        {"consultation_id": consultation_id, "symptom_id": symptom_id, "matched": matched},
     )
 
 
 def add_consultation_environment(
-    consultation_id: int,
-    condition_value_id: int,
-    matched: bool = False,
+    consultation_id: int, environmental_factor_id: int, matched: bool = False
 ) -> None:
     execute(
         """
         INSERT INTO consultation_environment (
-            consultation_id, condition_value_id, matched
-        )
-        VALUES (%(consultation_id)s, %(condition_value_id)s, %(matched)s)
-        ON CONFLICT (consultation_id, condition_value_id)
-        DO UPDATE SET matched = EXCLUDED.matched
+            consultation_id, environmental_factor_id, matched
+        ) VALUES (%(consultation_id)s, %(factor_id)s, %(matched)s)
+        ON CONFLICT (consultation_id, environmental_factor_id)
+        DO UPDATE SET matched=EXCLUDED.matched
         """,
-        {
-            "consultation_id": consultation_id,
-            "condition_value_id": condition_value_id,
-            "matched": matched,
-        },
+        {"consultation_id": consultation_id, "factor_id": environmental_factor_id, "matched": matched},
     )
 
 
@@ -111,180 +91,157 @@ def get_consultation_history(
     limit: int = 50,
 ) -> list[dict]:
     query = """
-        SELECT
-            c.id AS consultation_id,
-            c.consultation_date,
-            c.consultation_type,
-            c.source,
-            c.match_tier,
-            c.gemini_raw_extraction,
-            c.farmer_id,
-            f.full_name AS farmer_name,
-            u.username AS performed_by,
-            u.full_name AS performed_by_name,
-            cr.name AS crop_name,
-            d.name AS diagnosed_disease,
-            c.confidence_score,
-            COALESCE((
-                SELECT string_agg(s.name, ', ' ORDER BY s.name)
-                FROM consultation_symptom cs
-                JOIN symptom s ON s.id = cs.symptom_id
-                WHERE cs.consultation_id = c.id
-            ), '-') AS symptoms,
-            COALESCE(c.gemini_raw_extraction, ci.visual_summary) AS image_visual_summary,
-            COALESCE(c.source, CASE WHEN ci.id IS NULL THEN 'SYMPTOMS' ELSE 'IMAGE' END) AS diagnosis_source,
-            ci.analysis_source AS image_analysis_source
+        SELECT c.id AS consultation_id, c.consultation_date,
+               c.consultation_type, c.source, c.match_tier,
+               c.gemini_raw_extraction, c.farmer_id,
+               f.full_name AS farmer_name,
+               u.username AS performed_by, u.full_name AS performed_by_name,
+               cr.name AS crop_name, d.name AS diagnosed_disease,
+               c.final_confidence AS confidence_score,
+               COALESCE((
+                   SELECT string_agg(s.name, ', ' ORDER BY s.name)
+                   FROM consultation_symptom cs
+                   JOIN symptom s ON s.id=cs.symptom_id
+                   WHERE cs.consultation_id=c.id
+               ), '-') AS symptoms,
+               c.gemini_raw_extraction AS image_visual_summary,
+               c.source AS diagnosis_source,
+               CASE WHEN c.source='IMAGE' THEN 'gemini' END AS image_analysis_source
         FROM consultation c
-        JOIN app_user u ON u.id = c.performed_by_user_id
-        LEFT JOIN farmer f ON f.id = c.farmer_id
-        JOIN crop cr ON cr.id = c.crop_id
-        LEFT JOIN disease d ON d.id = c.diagnosis_disease_id
-        LEFT JOIN consultation_image ci ON ci.consultation_id = c.id
+        JOIN app_user u ON u.id=c.performed_by_user_id
+        LEFT JOIN app_user f ON f.id=c.farmer_id AND f.role='FARMER'
+        JOIN crop cr ON cr.id=c.crop_id
+        LEFT JOIN disease d ON d.id=c.final_disease_id
         WHERE 1=1
     """
     params: dict = {"limit": limit}
     if farmer_id is not None:
-        query += " AND c.farmer_id = %(farmer_id)s"
+        query += " AND c.farmer_id=%(farmer_id)s"
         params["farmer_id"] = farmer_id
     if performed_by_user_id is not None:
-        query += " AND c.performed_by_user_id = %(performed_by)s"
+        query += " AND c.performed_by_user_id=%(performed_by)s"
         params["performed_by"] = performed_by_user_id
     if diagnosis_source == "symptom":
-        query += " AND c.source = 'SYMPTOMS'"
+        query += " AND c.source='SYMPTOMS'"
     elif diagnosis_source == "image":
-        query += " AND c.source = 'IMAGE'"
+        query += " AND c.source='IMAGE'"
     query += " ORDER BY c.consultation_date DESC LIMIT %(limit)s"
     return fetch_all(query, params)
 
 
 def get_admin_dashboard_stats() -> dict:
-    row = fetch_one(
+    return dict(fetch_one(
         """
         SELECT
-            (SELECT COUNT(*) FROM farmer) AS farmer_count,
-            (SELECT COUNT(*) FROM consultation) AS total_consultations,
-            (SELECT COUNT(*) FROM consultation
-             WHERE diagnosis_disease_id IS NOT NULL) AS total_diagnoses,
-            (SELECT COUNT(*) FROM disease) AS disease_count,
-            (SELECT COUNT(*) FROM symptom) AS symptom_count,
-            (SELECT COUNT(*) FROM rule) AS rule_count,
-            (SELECT COUNT(*) FROM treatment) AS treatment_count,
-            (SELECT COUNT(*) FROM crop) AS crop_count,
-            (SELECT COUNT(*) FROM consultation
-             WHERE diagnosis_disease_id IS NOT NULL
-               AND consultation_date >= CURRENT_DATE - INTERVAL '7 days') AS this_week,
-            (SELECT COUNT(*) FROM consultation
-             WHERE diagnosis_disease_id IS NOT NULL
-               AND DATE_TRUNC('month', consultation_date)
-                   = DATE_TRUNC('month', CURRENT_DATE)) AS this_month
+          (SELECT COUNT(*) FROM app_user WHERE role='FARMER') AS farmer_count,
+          (SELECT COUNT(*) FROM consultation) AS total_consultations,
+          (SELECT COUNT(*) FROM consultation WHERE final_disease_id IS NOT NULL) AS total_diagnoses,
+          (SELECT COUNT(*) FROM disease) AS disease_count,
+          (SELECT COUNT(*) FROM symptom) AS symptom_count,
+          (SELECT COUNT(*) FROM rule) AS rule_count,
+          (SELECT COUNT(*) FROM treatment) AS treatment_count,
+          (SELECT COUNT(*) FROM crop) AS crop_count,
+          (SELECT COUNT(*) FROM consultation WHERE final_disease_id IS NOT NULL
+             AND consultation_date >= CURRENT_DATE - INTERVAL '7 days') AS this_week,
+          (SELECT COUNT(*) FROM consultation WHERE final_disease_id IS NOT NULL
+             AND DATE_TRUNC('month', consultation_date)=DATE_TRUNC('month', CURRENT_DATE)) AS this_month
         """
-    )
-    if not row:
-        return {
-            "farmer_count": 0,
-            "total_consultations": 0,
-            "total_diagnoses": 0,
-            "disease_count": 0,
-            "symptom_count": 0,
-            "rule_count": 0,
-            "treatment_count": 0,
-            "crop_count": 0,
-            "this_week": 0,
-            "this_month": 0,
-        }
-    return dict(row)
+    ))
 
 
 def get_farmer_dashboard_stats(farmer_id: int) -> dict:
-    total = fetch_one(
+    row = fetch_one(
         """
-        SELECT COUNT(*) AS count FROM consultation
-        WHERE farmer_id = %(farmer_id)s AND diagnosis_disease_id IS NOT NULL
-        """,
-        {"farmer_id": farmer_id},
-    )
-    this_week = fetch_one(
-        """
-        SELECT COUNT(*) AS count FROM consultation
-        WHERE farmer_id = %(farmer_id)s
-          AND diagnosis_disease_id IS NOT NULL
-          AND consultation_date >= CURRENT_DATE - INTERVAL '7 days'
-        """,
-        {"farmer_id": farmer_id},
-    )
-    this_month = fetch_one(
-        """
-        SELECT COUNT(*) AS count FROM consultation
-        WHERE farmer_id = %(farmer_id)s
-          AND diagnosis_disease_id IS NOT NULL
-          AND DATE_TRUNC('month', consultation_date) = DATE_TRUNC('month', CURRENT_DATE)
+        SELECT
+          COUNT(*) FILTER (WHERE final_disease_id IS NOT NULL) AS total,
+          COUNT(*) FILTER (WHERE final_disease_id IS NOT NULL AND consultation_date >= CURRENT_DATE-INTERVAL '7 days') AS this_week,
+          COUNT(*) FILTER (WHERE final_disease_id IS NOT NULL AND DATE_TRUNC('month',consultation_date)=DATE_TRUNC('month',CURRENT_DATE)) AS this_month
+        FROM consultation WHERE farmer_id=%(farmer_id)s
         """,
         {"farmer_id": farmer_id},
     )
     common = fetch_one(
         """
         SELECT d.name AS disease_name, COUNT(*) AS cnt
-        FROM consultation c
-        JOIN disease d ON d.id = c.diagnosis_disease_id
-        WHERE c.farmer_id = %(farmer_id)s
-        GROUP BY d.id, d.name
-        ORDER BY cnt DESC
-        LIMIT 1
+        FROM consultation c JOIN disease d ON d.id=c.final_disease_id
+        WHERE c.farmer_id=%(farmer_id)s
+        GROUP BY d.id,d.name ORDER BY cnt DESC LIMIT 1
         """,
         {"farmer_id": farmer_id},
     )
-    return {
-        "total": total["count"] if total else 0,
-        "this_week": this_week["count"] if this_week else 0,
-        "this_month": this_month["count"] if this_month else 0,
-        "common_disease": common["disease_name"] if common else "-",
-    }
+    return {"total": row["total"], "this_week": row["this_week"],
+            "this_month": row["this_month"],
+            "common_disease": common["disease_name"] if common else "-"}
 
 
 def get_consultation_summary(consultation_id: int) -> dict | None:
     return fetch_one(
         """
-        SELECT c.id, c.consultation_date, c.confidence_score, c.consultation_type,
-               c.source, c.match_tier, c.gemini_raw_extraction,
+        SELECT c.id, c.consultation_date,
+               c.final_confidence AS confidence_score,
+               c.consultation_type, c.source, c.match_tier,
+               c.gemini_raw_extraction,
                f.full_name AS farmer_name,
-               u.username AS performed_by,
-               u.full_name AS performed_by_name,
-               cr.name AS crop_name,
-               d.name AS disease_name,
-               dr.explanation, dr.result_title,
-               COALESCE((
-                   SELECT string_agg(s.name, ', ' ORDER BY s.name)
-                   FROM consultation_symptom cs
-                   JOIN symptom s ON s.id = cs.symptom_id
-                   WHERE cs.consultation_id = c.id
-               ), '-') AS symptoms,
-               COALESCE((
-                   SELECT string_agg(t.name, ', ' ORDER BY ct.id)
-                   FROM consultation_treatment ct
-                   JOIN treatment t ON t.id = ct.treatment_id
-                   WHERE ct.consultation_id = c.id
-               ), '-') AS treatments
+               u.username AS performed_by, u.full_name AS performed_by_name,
+               cr.name AS crop_name, d.name AS disease_name,
+               c.explanation,
+               CASE WHEN d.name IS NULL THEN 'No diagnosis'
+                    ELSE 'Possible disease: ' || d.name END AS result_title,
+               COALESCE((SELECT string_agg(s.name, ', ' ORDER BY s.name)
+                         FROM consultation_symptom cs JOIN symptom s ON s.id=cs.symptom_id
+                         WHERE cs.consultation_id=c.id), '-') AS symptoms,
+               COALESCE((SELECT string_agg(t.name, ', ' ORDER BY ct.id)
+                         FROM consultation_treatment ct JOIN treatment t ON t.id=ct.treatment_id
+                         WHERE ct.consultation_id=c.id), '-') AS treatments
         FROM consultation c
-        JOIN app_user u ON u.id = c.performed_by_user_id
-        LEFT JOIN farmer f ON f.id = c.farmer_id
-        JOIN crop cr ON cr.id = c.crop_id
-        LEFT JOIN disease d ON d.id = c.diagnosis_disease_id
-        LEFT JOIN diagnosis_result dr ON dr.consultation_id = c.id
-        WHERE c.id = %(id)s
+        JOIN app_user u ON u.id=c.performed_by_user_id
+        LEFT JOIN app_user f ON f.id=c.farmer_id AND f.role='FARMER'
+        JOIN crop cr ON cr.id=c.crop_id
+        LEFT JOIN disease d ON d.id=c.final_disease_id
+        WHERE c.id=%(id)s
         """,
         {"id": consultation_id},
+    )
+
+
+def get_diagnosis_detail(consultation_id: int) -> list[dict]:
+    return fetch_all(
+        """
+        SELECT c.id AS diagnosis_result_id,
+               CASE WHEN d.name IS NULL THEN 'No diagnosis'
+                    ELSE 'Possible disease: ' || d.name END AS result_title,
+               c.explanation, c.final_confidence AS confidence_score,
+               c.consultation_type, d.name AS disease_name,
+               r.id AS rule_id, r.rule_name,
+               c.final_confidence AS matched_score,
+               s.id AS symptom_id, s.name AS reason_symptom_name,
+               ef.id AS environmental_factor_id,
+               ef.category AS reason_condition_name,
+               ef.value_name AS reason_condition_value
+        FROM consultation c
+        LEFT JOIN disease d ON d.id=c.final_disease_id
+        LEFT JOIN rule r ON r.id=c.matched_rule_id
+        LEFT JOIN consultation_symptom cs ON cs.consultation_id=c.id AND cs.matched=TRUE
+        LEFT JOIN symptom s ON s.id=cs.symptom_id
+        LEFT JOIN consultation_environment ce ON ce.consultation_id=c.id AND ce.matched=TRUE
+        LEFT JOIN environmental_factor ef ON ef.id=ce.environmental_factor_id
+        WHERE c.id=%(consultation_id)s
+        ORDER BY s.name, ef.category
+        """,
+        {"consultation_id": consultation_id},
     )
 
 
 def get_consultation_image(consultation_id: int) -> dict | None:
     return fetch_one(
         """
-        SELECT id, consultation_id, original_filename, analysis_summary,
-               visual_summary, analysis_source, gemini_model, created_at
-        FROM consultation_image
-        WHERE consultation_id = %(id)s
-        ORDER BY created_at DESC
-        LIMIT 1
+        SELECT id AS consultation_id,
+               gemini_raw_extraction AS analysis_summary,
+               gemini_raw_extraction AS visual_summary,
+               'gemini'::VARCHAR AS analysis_source,
+               NULL::VARCHAR AS gemini_model,
+               consultation_date AS created_at
+        FROM consultation WHERE id=%(id)s AND source='IMAGE'
         """,
         {"id": consultation_id},
     )
