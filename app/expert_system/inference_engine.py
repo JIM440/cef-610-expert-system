@@ -1,8 +1,8 @@
-﻿"""
+"""
 Inference engine - uses Rule Knowledge only (rule_symptom, rule_environment).
 
-Does NOT read disease_symptom. Disease facts are for display and AI training,
-not for rule matching. See ARCHITECTURE.md.
+Does NOT read disease_symptom. Disease facts are for display and context,
+not for rule matching. See README.md.
 """
 
 from dataclasses import dataclass

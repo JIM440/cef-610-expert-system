@@ -9,9 +9,24 @@ def render_login_page() -> None:
         """
         <style>
             [data-testid="stSidebar"] { display: none; }
-            .main .block-container {
-                max-width: 400px;
+            [data-testid="stMainBlockContainer"] {
+                width: 100%;
+                max-width: 660px;
+                margin-left: auto;
+                margin-right: auto;
+                box-sizing: border-box;
                 padding-top: 12vh;
+            }
+            [data-testid="stMainBlockContainer"] h1,
+            [data-testid="stMainBlockContainer"] [data-testid="stCaptionContainer"] {
+                text-align: center;
+            }
+            [data-testid="stMainBlockContainer"] [data-testid="stForm"],
+            [data-testid="stMainBlockContainer"] [data-testid="stTextInput"] {
+                width: 100%;
+                max-width: 500px;
+                margin-left: auto;
+                margin-right: auto;
             }
         </style>
         """,
@@ -19,7 +34,7 @@ def render_login_page() -> None:
     )
 
     st.title("Crop Disease Expert System")
-    st.caption("Farmers and experts — sign in to continue")
+    st.caption("Farmers and experts - sign in to continue")
 
     with st.form("login_form"):
         username = st.text_input("Username", placeholder="Enter your username")
