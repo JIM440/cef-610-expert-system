@@ -8,7 +8,7 @@ from app.config import DB_CONFIG
 
 REQUIRED_SCHEMA_COLUMNS = {
     "app_user": {"role", "phone_number", "location", "email", "updated_at"},
-    "consultation": {"source", "gemini_raw_extraction", "match_tier", "final_disease_id", "final_confidence", "matched_rule_id", "explanation"},
+    "consultation": {"source", "gemini_raw_extraction", "match_tier", "final_disease_id", "final_confidence", "matched_rule_id", "explanation", "ai_predicted_disease_id", "ai_confidence", "ai_model_version"},
     "consultation_symptom": {"matched"},
     "consultation_environment": {"environmental_factor_id", "matched"},
     "rule_environment": {"environmental_factor_id"},

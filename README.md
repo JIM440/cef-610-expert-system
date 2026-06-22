@@ -2,7 +2,7 @@
 
 A database-driven expert system for diagnosing tomato plant diseases from manually selected symptoms or symptoms extracted from an uploaded image by Google Gemini. The application is built with Streamlit and PostgreSQL.
 
-Gemini is not the diagnostic authority. It only observes an uploaded tomato image and extracts visible symptoms. The final disease, confidence, explanation, and treatments are determined by expert rules stored in PostgreSQL and evaluated by the application's inference engine.
+Gemini is not the diagnostic authority. It only observes an uploaded tomato image and extracts visible symptoms. Every diagnosis then runs two independent methods: the expert-rule inference engine and a knowledge-base-derived Naive Bayes predictor. Both raw results are stored and displayed, with an agreement indicator; treatments remain rule-derived.
 
 ## Table of contents
 
@@ -11,19 +11,21 @@ Gemini is not the diagnostic authority. It only observes an uploaded tomato imag
 3. [Users and application pages](#users-and-application-pages)
 4. [Diagnosis workflows](#diagnosis-workflows)
 5. [Expert-system reasoning](#expert-system-reasoning)
-6. [Image recognition with Gemini](#image-recognition-with-gemini)
-7. [System architecture](#system-architecture)
-8. [Database design](#database-design)
-9. [Normalization decisions](#normalization-decisions)
-10. [Database consolidation](#database-consolidation)
-11. [History and PDF reports](#history-and-pdf-reports)
-12. [Authentication and authorization](#authentication-and-authorization)
-13. [User-interface decisions](#user-interface-decisions)
-14. [Installation and configuration](#installation-and-configuration)
-15. [Running and testing](#running-and-testing)
-16. [Project structure](#project-structure)
-17. [Known limitations and safeguards](#known-limitations-and-safeguards)
-18. [Future improvements](#future-improvements)
+6. [AI prediction and hybrid diagnosis](#ai-prediction-and-hybrid-diagnosis)
+7. [Image recognition with Gemini](#image-recognition-with-gemini)
+8. [System architecture](#system-architecture)
+9. [Database design](#database-design)
+10. [Entity-relationship diagram](#entity-relationship-diagram)
+11. [Normalization decisions](#normalization-decisions)
+12. [Database consolidation](#database-consolidation)
+13. [History and PDF reports](#history-and-pdf-reports)
+14. [Authentication and authorization](#authentication-and-authorization)
+15. [User-interface decisions](#user-interface-decisions)
+16. [Installation and configuration](#installation-and-configuration)
+17. [Running and testing](#running-and-testing)
+18. [Project structure](#project-structure)
+19. [Known limitations and safeguards](#known-limitations-and-safeguards)
+20. [Future improvements](#future-improvements)
 
 ## Project objectives
 
@@ -33,7 +35,7 @@ The project demonstrates a practical crop-disease expert system that can:
 - allow farmers to perform their own diagnoses;
 - allow experts to perform general diagnoses or diagnoses for registered farmers;
 - use Gemini Vision to extract visible symptoms from tomato images;
-- keep the final diagnosis under the control of a transparent rule-based inference engine;
+- run a transparent rule-based diagnosis and an independent Naive Bayes disease prediction for the same evidence;
 - explain which rule and evidence produced the diagnosis;
 - preserve consultation history;
 - generate editable, on-demand PDF reports;
@@ -46,13 +48,14 @@ The project demonstrates a practical crop-disease expert system that can:
 - The crop is currently restricted to tomato plants.
 - Manual diagnosis uses selected symptoms and optional environmental factors.
 - Image diagnosis accepts image files and uses Gemini to identify visible symptoms.
-- The PostgreSQL rule base produces the final diagnosis and treatment list.
+- The PostgreSQL rule base produces the rule-based diagnosis and treatment list.
+- A runtime Naive Bayes model independently predicts a disease from the same evidence.
 - Both farmers and experts have database-backed accounts.
 
 ### Core principles
 
 - No disease, symptom, treatment, environmental factor, user, or expert rule is hardcoded into the UI.
-- Gemini never directly selects the final disease.
+- Gemini never directly selects either stored disease result.
 - Uploaded image bytes are processed in memory and are not stored in PostgreSQL.
 - Knowledge relationships use normalized junction tables rather than arrays, CSV values, or JSON columns.
 - One `consultation` row represents one diagnosis event.
@@ -195,6 +198,54 @@ The system stores and displays:
 
 This makes the result traceable to database evidence rather than an unexplained AI prediction.
 
+## AI prediction and hybrid diagnosis
+
+### Phase 6: Naive Bayes AI prediction
+
+`app/expert_system/ai_predictor.py` provides a model-like `NaiveBayesPredictor` with model version `naive_bayes_v1` and a `predict(symptom_ids, environmental_factor_ids, crop_id)` method.
+
+This is actual Naive Bayes computation, but it is not an offline model fitted to a separate historical training dataset. At prediction time, the component derives:
+
+- disease priors from the total knowledge evidence associated with each disease;
+- symptom likelihoods from `disease_symptom.weight` plus one observation for each active `rule_symptom` relationship;
+- environmental-factor likelihoods from active `rule_environment` relationships;
+- unseen-event probabilities through Laplace smoothing with alpha 1.
+
+For each disease, the implementation computes in log space:
+
+```text
+log score(disease) = log P(disease)
+                   + sum(log P(selected symptom | disease))
+                   + sum(log P(selected environmental factor | disease))
+```
+
+The log scores are converted with a numerically stable softmax and normalized across every disease for the crop. The disease with the largest posterior probability becomes the AI prediction, and its normalized probability is rounded to an integer percentage. No AI result is produced when no symptom is supplied.
+
+This approach is knowledge-base-derived rather than historically fitted. It must not be described as using a held-out training split, and it does not establish real-world classification accuracy by itself.
+
+### Phase 7: hybrid expert system
+
+Every manual or image-assisted diagnosis sends the same symptom and environmental-factor IDs to two independent paths:
+
+1. **Rule-Based Result**: existing expert-rule inference, matched rule, explanation, confidence, and treatments.
+2. **AI Prediction (Naive Bayes)**: independently normalized disease probability from the live knowledge base.
+
+The UI shows both results side by side. It never replaces them with a merged confidence. A separate indicator states whether both methods selected the same disease.
+
+The consultation stores the rule result in the existing `final_disease_id`, `final_confidence`, `matched_rule_id`, and `explanation` columns. The AI result is stored in:
+
+- `ai_predicted_disease_id`;
+- `ai_confidence`;
+- `ai_model_version`.
+
+If no expert rule matches but Naive Bayes returns a prediction, the consultation is still retained with match tier `NONE`, an empty rule result, and the independent AI result. Proposed treatments remain empty because treatments are intentionally tied to expert rules, not inferred by Naive Bayes.
+
+### Phase 9 evaluation boundary
+
+`scripts/evaluate_hybrid.py` reports the actual agreement rate among stored consultations that contain both a rule-based disease and an AI-predicted disease. It reports eligible consultations, agreements, disagreements, and agreement percentage.
+
+Agreement is not accuracy. The project currently has no independent ground-truth labels or held-out historical dataset, so it does not claim accuracy, precision, recall, F1, or generalization performance. Existing consultations created before the AI columns are excluded until they have both results. A future evaluation can compare both methods with expert-confirmed or laboratory-confirmed outcomes.
+
 ## Image recognition with Gemini
 
 ### Gemini's responsibility
@@ -295,8 +346,11 @@ The production database contains exactly 15 public application tables.
 - `performed_by_user_id`: account that performed the diagnosis;
 - `farmer_id`: optional farmer receiving the diagnosis;
 - `crop_id`: diagnosed crop;
-- `final_disease_id`: selected disease;
-- `final_confidence`: final percentage from 0 to 100;
+- `final_disease_id`: rule-based selected disease;
+- `final_confidence`: rule-based percentage from 0 to 100;
+- `ai_predicted_disease_id`: independently predicted Naive Bayes disease;
+- `ai_confidence`: normalized Naive Bayes probability from 0 to 100;
+- `ai_model_version`: predictor version such as `naive_bayes_v1`;
 - `matched_rule_id`: rule responsible for the diagnosis;
 - `explanation`: stored human-readable reason;
 - `source`: `SYMPTOMS` or `IMAGE`;
@@ -435,28 +489,22 @@ Because the old schema cannot be reconstructed losslessly from the consolidated 
 | `database/schema.sql` | Exact current 15-table schema |
 | `database/seed.sql` | Current knowledge base, demo accounts, and retained consultation data |
 | `database/consolidate_29_to_15.sql` | One-time legacy 29-to-15-table migration |
+| `database/add_naive_bayes_columns.sql` | Additive Phase 6/7 consultation columns |
 
 ## History and PDF reports
 
-History lists consultations with actual symptom names, diagnosis source, farmer, crop, disease, confidence, and date.
+History shows every consultation matching the active filters. Experts see all consultations by default and can restrict the view to a particular farmer; farmers only see consultations associated with their own account. The source filter continues to support all, manual, and image diagnoses.
 
-Experts can view all consultations and filter them. Farmers can only view consultations associated with their own account.
+The history table is read-only and has no ID column, row-selection checkboxes, or hidden selection state. It displays:
 
-Before export, report title, summary, notes, and recommendations can be edited in the UI. `PdfService` then builds a PDF containing:
-
-- farmer or general-consultation label;
-- performing user;
-- crop;
-- disease;
-- confidence;
-- consultation date;
-- source;
+- date and farmer when applicable;
+- rule-based disease and confidence;
+- Naive Bayes disease and confidence;
+- agreement status;
 - submitted symptoms;
-- summary;
-- diagnosis explanation;
-- recommended treatments;
-- expert notes;
-- recommendations.
+- diagnosis source and consultation type.
+
+The **Export PDF** tab formats every currently filtered consultation into one large scrollable text area. The user can edit the complete report as a single formatted body before generating one PDF. When an expert filters to a farmer, only that farmer's consultations enter the editor and PDF. The report includes actor, crop, source, both independent results, model version, agreement, symptoms, rule explanation, proposed treatments, and Gemini extraction text when present.
 
 The edited report is downloaded directly and is not inserted into a report table.
 
@@ -601,7 +649,7 @@ The vision script requires a valid API key and a suitable tomato image input acc
 ### Verified state on 2026-06-22
 
 - Python compilation passed.
-- Eight automated tests passed.
+- Twelve automated tests passed, including Naive Bayes weighting, normalization, environmental evidence, and no-symptom behavior.
 - All expert and farmer Streamlit pages rendered without exceptions through Streamlit's application test harness.
 - Repository queries passed against the migrated live database.
 - A fresh temporary database restored successfully from `schema.sql` and `seed.sql`.
@@ -628,8 +676,11 @@ database/
   seed.sql              Current knowledge base and demo data
   consolidate_29_to_15.sql
                          One-time legacy schema consolidation
+  add_naive_bayes_columns.sql
+                         Additive Phase 6/7 consultation columns
 
 scripts/
+  evaluate_hybrid.py    Stored-consultation agreement evaluation
   test_gemini_connection.py
   test_gemini_vision.py
 
@@ -658,20 +709,24 @@ README.md               Complete project documentation
 - Database constraints restrict roles, confidence, source, match tier, and consultation type.
 - Schema health checks require the consolidated columns, exactly 15 public tables, and an active expert account.
 - Role checks protect expert and farmer pages.
-- Gemini cannot introduce a disease outside the database rule base.
+- Gemini cannot introduce a disease outside the database symptom catalog.
+- Naive Bayes can only select a disease already defined for the crop.
+- The UI preserves rule and AI confidence separately rather than presenting a misleading merged score.
 - Uploaded image bytes are not persisted.
 - Reports are generated from the authoritative consultation record.
 - The legacy destructive migration documents backup and rollback requirements.
 
+
 ## Future improvements
 
-- Add more crops while preserving crop-specific rules.
-- Add expert review and approval states for low-confidence farmer diagnoses.
+- Add more crops while preserving crop-specific rules and crop-specific Naive Bayes evidence.
+- Add expert review and approval states for low-confidence or disagreeing diagnoses.
+- Add expert-confirmed or laboratory-confirmed outcome labels for honest accuracy, precision, recall, F1, and cross-validation.
 - Add audit logging for knowledge-base changes.
 - Upgrade password hashing to a slow salted scheme such as Argon2 or bcrypt.
-- Add automated browser regression tests and PDF-content tests.
+- Add automated browser regression tests and more PDF-content tests.
 - Add image-size, MIME, and upload-rate limits for deployment.
-- Add rule versioning so historical consultations can reference the exact knowledge version used.
+- Add rule and AI-model versioning so historical consultations reference the exact knowledge version used.
 - Add multilingual symptom and treatment labels.
 - Add controlled weather-data integration as environmental evidence.
 - Add deployment documentation, encrypted secrets management, and database backup scheduling.

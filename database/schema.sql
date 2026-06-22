@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict xXcy2UM1NYE3XdELzUaeb7N1fdznHwk9zHRq7D48NhLoYcc5IgLGZeSwfB3CDel
+\restrict b792kMOe8wzeKV0Xw97RKiHBN7AzJbXYhLIrK1GgIbxDQEil17NMf0qMoixplzZ
 
 -- Dumped from database version 18.4
 -- Dumped by pg_dump version 18.4
@@ -82,6 +82,10 @@ CREATE TABLE public.consultation (
     match_tier character varying(20) DEFAULT 'HIGH'::character varying NOT NULL,
     matched_rule_id integer,
     explanation text,
+    ai_predicted_disease_id integer,
+    ai_confidence integer,
+    ai_model_version character varying(30),
+    CONSTRAINT consultation_ai_confidence_check CHECK (((ai_confidence IS NULL) OR ((ai_confidence >= 0) AND (ai_confidence <= 100)))),
     CONSTRAINT consultation_confidence_score_check CHECK (((final_confidence >= 0) AND (final_confidence <= 100))),
     CONSTRAINT consultation_match_tier_check CHECK (((match_tier)::text = ANY ((ARRAY['HIGH'::character varying, 'LOW'::character varying, 'NONE'::character varying])::text[]))),
     CONSTRAINT consultation_source_check CHECK (((source)::text = ANY ((ARRAY['SYMPTOMS'::character varying, 'IMAGE'::character varying])::text[]))),
@@ -864,6 +868,14 @@ ALTER TABLE ONLY public.treatment
 
 
 --
+-- Name: consultation consultation_ai_predicted_disease_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.consultation
+    ADD CONSTRAINT consultation_ai_predicted_disease_id_fkey FOREIGN KEY (ai_predicted_disease_id) REFERENCES public.disease(id);
+
+
+--
 -- Name: consultation consultation_crop_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1035,4 +1047,4 @@ ALTER TABLE ONLY public.rule_treatment
 -- PostgreSQL database dump complete
 --
 
-\unrestrict xXcy2UM1NYE3XdELzUaeb7N1fdznHwk9zHRq7D48NhLoYcc5IgLGZeSwfB3CDel
+\unrestrict b792kMOe8wzeKV0Xw97RKiHBN7AzJbXYhLIrK1GgIbxDQEil17NMf0qMoixplzZ

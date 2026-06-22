@@ -13,6 +13,9 @@ def create_consultation(
     gemini_raw_extraction: str | None = None,
     matched_rule_id: int | None = None,
     explanation: str | None = None,
+    ai_predicted_disease_id: int | None = None,
+    ai_confidence: int | None = None,
+    ai_model_version: str | None = None,
 ) -> int:
     return execute(
         """
@@ -20,13 +23,15 @@ def create_consultation(
             performed_by_user_id, farmer_id, crop_id,
             final_disease_id, final_confidence, consultation_type,
             source, match_tier, gemini_raw_extraction,
-            matched_rule_id, explanation
+            matched_rule_id, explanation,
+            ai_predicted_disease_id, ai_confidence, ai_model_version
         )
         VALUES (
             %(performed_by)s, %(farmer_id)s, %(crop_id)s,
             %(disease_id)s, %(confidence)s, %(ctype)s,
             %(source)s, %(match_tier)s, %(gemini_raw)s,
-            %(matched_rule_id)s, %(explanation)s
+            %(matched_rule_id)s, %(explanation)s,
+            %(ai_disease_id)s, %(ai_confidence)s, %(ai_model_version)s
         )
         RETURNING id
         """,
@@ -42,6 +47,9 @@ def create_consultation(
             "gemini_raw": gemini_raw_extraction,
             "matched_rule_id": matched_rule_id,
             "explanation": explanation,
+            "ai_disease_id": ai_predicted_disease_id,
+            "ai_confidence": ai_confidence,
+            "ai_model_version": ai_model_version,
         },
     )
 
@@ -88,22 +96,34 @@ def get_consultation_history(
     farmer_id: int | None = None,
     performed_by_user_id: int | None = None,
     diagnosis_source: str = "all",
-    limit: int = 50,
+    limit: int | None = None,
 ) -> list[dict]:
     query = """
         SELECT c.id AS consultation_id, c.consultation_date,
                c.consultation_type, c.source, c.match_tier,
-               c.gemini_raw_extraction, c.farmer_id,
+               c.gemini_raw_extraction, c.farmer_id, c.explanation,
                f.full_name AS farmer_name,
                u.username AS performed_by, u.full_name AS performed_by_name,
                cr.name AS crop_name, d.name AS diagnosed_disease,
                c.final_confidence AS confidence_score,
+               ai_d.name AS ai_predicted_disease,
+               c.ai_predicted_disease_id, c.ai_confidence, c.ai_model_version,
+               CASE
+                   WHEN c.final_disease_id IS NULL OR c.ai_predicted_disease_id IS NULL THEN NULL
+                   ELSE c.final_disease_id=c.ai_predicted_disease_id
+               END AS methods_agree,
                COALESCE((
                    SELECT string_agg(s.name, ', ' ORDER BY s.name)
                    FROM consultation_symptom cs
                    JOIN symptom s ON s.id=cs.symptom_id
                    WHERE cs.consultation_id=c.id
                ), '-') AS symptoms,
+               COALESCE((
+                   SELECT string_agg(t.name, ', ' ORDER BY ct.id)
+                   FROM consultation_treatment ct
+                   JOIN treatment t ON t.id=ct.treatment_id
+                   WHERE ct.consultation_id=c.id
+               ), '-') AS treatments,
                c.gemini_raw_extraction AS image_visual_summary,
                c.source AS diagnosis_source,
                CASE WHEN c.source='IMAGE' THEN 'gemini' END AS image_analysis_source
@@ -112,9 +132,10 @@ def get_consultation_history(
         LEFT JOIN app_user f ON f.id=c.farmer_id AND f.role='FARMER'
         JOIN crop cr ON cr.id=c.crop_id
         LEFT JOIN disease d ON d.id=c.final_disease_id
+        LEFT JOIN disease ai_d ON ai_d.id=c.ai_predicted_disease_id
         WHERE 1=1
     """
-    params: dict = {"limit": limit}
+    params: dict = {}
     if farmer_id is not None:
         query += " AND c.farmer_id=%(farmer_id)s"
         params["farmer_id"] = farmer_id
@@ -125,7 +146,10 @@ def get_consultation_history(
         query += " AND c.source='SYMPTOMS'"
     elif diagnosis_source == "image":
         query += " AND c.source='IMAGE'"
-    query += " ORDER BY c.consultation_date DESC LIMIT %(limit)s"
+    query += " ORDER BY c.consultation_date DESC"
+    if limit is not None:
+        query += " LIMIT %(limit)s"
+        params["limit"] = limit
     return fetch_all(query, params)
 
 
@@ -172,76 +196,3 @@ def get_farmer_dashboard_stats(farmer_id: int) -> dict:
     return {"total": row["total"], "this_week": row["this_week"],
             "this_month": row["this_month"],
             "common_disease": common["disease_name"] if common else "-"}
-
-
-def get_consultation_summary(consultation_id: int) -> dict | None:
-    return fetch_one(
-        """
-        SELECT c.id, c.consultation_date,
-               c.final_confidence AS confidence_score,
-               c.consultation_type, c.source, c.match_tier,
-               c.gemini_raw_extraction,
-               f.full_name AS farmer_name,
-               u.username AS performed_by, u.full_name AS performed_by_name,
-               cr.name AS crop_name, d.name AS disease_name,
-               c.explanation,
-               CASE WHEN d.name IS NULL THEN 'No diagnosis'
-                    ELSE 'Possible disease: ' || d.name END AS result_title,
-               COALESCE((SELECT string_agg(s.name, ', ' ORDER BY s.name)
-                         FROM consultation_symptom cs JOIN symptom s ON s.id=cs.symptom_id
-                         WHERE cs.consultation_id=c.id), '-') AS symptoms,
-               COALESCE((SELECT string_agg(t.name, ', ' ORDER BY ct.id)
-                         FROM consultation_treatment ct JOIN treatment t ON t.id=ct.treatment_id
-                         WHERE ct.consultation_id=c.id), '-') AS treatments
-        FROM consultation c
-        JOIN app_user u ON u.id=c.performed_by_user_id
-        LEFT JOIN app_user f ON f.id=c.farmer_id AND f.role='FARMER'
-        JOIN crop cr ON cr.id=c.crop_id
-        LEFT JOIN disease d ON d.id=c.final_disease_id
-        WHERE c.id=%(id)s
-        """,
-        {"id": consultation_id},
-    )
-
-
-def get_diagnosis_detail(consultation_id: int) -> list[dict]:
-    return fetch_all(
-        """
-        SELECT c.id AS diagnosis_result_id,
-               CASE WHEN d.name IS NULL THEN 'No diagnosis'
-                    ELSE 'Possible disease: ' || d.name END AS result_title,
-               c.explanation, c.final_confidence AS confidence_score,
-               c.consultation_type, d.name AS disease_name,
-               r.id AS rule_id, r.rule_name,
-               c.final_confidence AS matched_score,
-               s.id AS symptom_id, s.name AS reason_symptom_name,
-               ef.id AS environmental_factor_id,
-               ef.category AS reason_condition_name,
-               ef.value_name AS reason_condition_value
-        FROM consultation c
-        LEFT JOIN disease d ON d.id=c.final_disease_id
-        LEFT JOIN rule r ON r.id=c.matched_rule_id
-        LEFT JOIN consultation_symptom cs ON cs.consultation_id=c.id AND cs.matched=TRUE
-        LEFT JOIN symptom s ON s.id=cs.symptom_id
-        LEFT JOIN consultation_environment ce ON ce.consultation_id=c.id AND ce.matched=TRUE
-        LEFT JOIN environmental_factor ef ON ef.id=ce.environmental_factor_id
-        WHERE c.id=%(consultation_id)s
-        ORDER BY s.name, ef.category
-        """,
-        {"consultation_id": consultation_id},
-    )
-
-
-def get_consultation_image(consultation_id: int) -> dict | None:
-    return fetch_one(
-        """
-        SELECT id AS consultation_id,
-               gemini_raw_extraction AS analysis_summary,
-               gemini_raw_extraction AS visual_summary,
-               'gemini'::VARCHAR AS analysis_source,
-               NULL::VARCHAR AS gemini_model,
-               consultation_date AS created_at
-        FROM consultation WHERE id=%(id)s AND source='IMAGE'
-        """,
-        {"id": consultation_id},
-    )
